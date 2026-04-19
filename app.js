@@ -70,9 +70,63 @@ let currentSession = null;
 let currentUserRole = "";
 const PROJECT_ACCESS_STORAGE_KEY = "creatorDeskProjectAccess";
 const PENDING_CREATOR_SELECTION_KEY = "creatorDeskPendingCreatorSelection";
+const OAUTH_PROVIDER_TOKEN_STORAGE_KEY = "creatorDeskOAuthProviderToken";
+const OAUTH_PROVIDER_REFRESH_TOKEN_STORAGE_KEY = "creatorDeskOAuthProviderRefreshToken";
+const DEFAULT_PRODUCTION_API_ORIGIN = "https://creatordec-production.up.railway.app";
+
+function cacheProviderTokensFromSession(session) {
+  if (session?.provider_token) {
+    window.localStorage.setItem(OAUTH_PROVIDER_TOKEN_STORAGE_KEY, session.provider_token);
+  }
+
+  if (session?.provider_refresh_token) {
+    window.localStorage.setItem(OAUTH_PROVIDER_REFRESH_TOKEN_STORAGE_KEY, session.provider_refresh_token);
+  }
+}
+
+function cacheProviderTokensFromUrl() {
+  const hashParams = new URLSearchParams(window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash);
+  const providerToken = hashParams.get("provider_token");
+  const providerRefreshToken = hashParams.get("provider_refresh_token");
+
+  if (providerToken) {
+    window.localStorage.setItem(OAUTH_PROVIDER_TOKEN_STORAGE_KEY, providerToken);
+  }
+
+  if (providerRefreshToken) {
+    window.localStorage.setItem(OAUTH_PROVIDER_REFRESH_TOKEN_STORAGE_KEY, providerRefreshToken);
+  }
+}
+
+if (isSupabaseConfigured) {
+  cacheProviderTokensFromUrl();
+  supabase.auth.onAuthStateChange((event, session) => {
+    cacheProviderTokensFromSession(session);
+
+    if (event === "SIGNED_OUT") {
+      window.localStorage.removeItem(OAUTH_PROVIDER_TOKEN_STORAGE_KEY);
+      window.localStorage.removeItem(OAUTH_PROVIDER_REFRESH_TOKEN_STORAGE_KEY);
+    }
+  });
+}
 
 function canUseBackend() {
   return window.location.protocol === "http:" || window.location.protocol === "https:";
+}
+
+function getApiUrl(path) {
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
+  const configuredOrigin = window.CREATOR_DESK_API_ORIGIN || "";
+  const hostname = window.location.hostname;
+  const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "";
+  const isRailwayHost = hostname.endsWith(".up.railway.app");
+  const apiOrigin = configuredOrigin || (!isLocalHost && !isRailwayHost ? DEFAULT_PRODUCTION_API_ORIGIN : "");
+  return `${apiOrigin}${path}`;
 }
 
 async function sendApi(path, method = "GET", payload) {
@@ -81,7 +135,7 @@ async function sendApi(path, method = "GET", payload) {
   }
 
   try {
-    const response = await fetch(path, {
+    const response = await fetch(getApiUrl(path), {
       method,
       headers: payload ? { "Content-Type": "application/json" } : undefined,
       body: payload ? JSON.stringify(payload) : undefined
@@ -112,7 +166,7 @@ async function sendApiStrict(path, method = "GET", payload, options = {}) {
     body = JSON.stringify(payload);
   }
 
-  const response = await fetch(path, {
+  const response = await fetch(getApiUrl(path), {
     method,
     headers,
     body
@@ -289,7 +343,7 @@ function extractXDataFromUser(user) {
 }
 
 async function fetchXDataFromProviderToken(session) {
-  const providerToken = session?.provider_token;
+  const providerToken = session?.provider_token || window.localStorage.getItem(OAUTH_PROVIDER_TOKEN_STORAGE_KEY);
   if (!providerToken) {
     return null;
   }
@@ -1196,7 +1250,7 @@ function parseXHandle(profileUrl) {
 }
 
 async function requestXProfileEnrichment(handle) {
-  const response = await fetch(`/api/x-profile?handle=${encodeURIComponent(handle)}`);
+  const response = await fetch(getApiUrl(`/api/x-profile?handle=${encodeURIComponent(handle)}`));
   if (!response.ok) {
     throw new Error("X enrichment endpoint is not available yet.");
   }
@@ -1226,7 +1280,7 @@ function renderCreatorXIntel(profile, options = {}) {
               : `<span>${escapeHtml(handle || "X profile")}</span>`}
           </div>
         </div>
-        ${options.showRefreshButton ? '<button class="button subtle" id="refreshXData" type="button">Refresh X data</button>' : `<span>${escapeHtml(options.label || "Data collected directly from X")}</span>`}
+        ${options.showRefreshButton ? '<button class="button subtle" id="refreshXData" type="button" data-refresh-x-data>Refresh X data</button>' : `<span>${escapeHtml(options.label || "Data collected directly from X")}</span>`}
       </div>
       <div class="x-intel-grid">
         <span><strong>${formatCount(profile.followers)}</strong> Followers</span>
@@ -1675,6 +1729,7 @@ async function initCreatorDashboard() {
           <p class="eyebrow">Creator profile</p>
           <h2>${escapeHtml(activeCreator.name)}</h2>
           <p>${escapeHtml(activeCreator.handle)} | ${getCreatorFollowers(activeCreator).toLocaleString()} followers | Sorsa ${escapeHtml(activeCreator.sorsaScore)}${activeCreator.verifiedCampaign ? " | Verified campaign" : ""}</p>
+          <button class="button subtle dashboard-mobile-refresh" type="button" data-refresh-x-data>Refresh X data</button>
         </div>
         <label>
           Availability
@@ -1794,7 +1849,6 @@ async function initCreatorDashboard() {
     const videoOptions = document.querySelector("#dashboardVideoOptions");
     const rateRange = document.querySelector("#dashboardRateRange");
     const rateLabel = document.querySelector("#dashboardRateLabel");
-    const refreshXDataButton = document.querySelector("#refreshXData");
 
     availabilitySelect.value = activeCreator.availability || "Available this week";
     renderRegionSelect(regionSelect);
@@ -1805,15 +1859,19 @@ async function initCreatorDashboard() {
     renderPortfolio(activeCreator);
     renderIncomingRequests(incomingRequests);
 
-    refreshXDataButton?.addEventListener("click", async () => {
+    document.querySelectorAll("[data-refresh-x-data]").forEach((refreshXDataButton) => refreshXDataButton.addEventListener("click", async () => {
       try {
+        refreshXDataButton.disabled = true;
+        refreshXDataButton.textContent = "Refreshing...";
         activeCreator = await refreshCreatorXData(activeCreator);
         showToast("X profile data refreshed");
         await renderCreatorDashboard(activeCreator);
       } catch (error) {
+        refreshXDataButton.disabled = false;
+        refreshXDataButton.textContent = "Refresh X data";
         showToast(error.message || "X profile data could not be refreshed.");
       }
-    });
+    }));
 
     availabilitySelect.addEventListener("change", async () => {
       activeCreator = await saveCreatorProfile({
