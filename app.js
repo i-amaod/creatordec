@@ -172,6 +172,34 @@ function getRedirectUrl(page) {
   return `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, page)}`;
 }
 
+function hasAuthCallbackParams() {
+  const hashParams = new URLSearchParams(window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash);
+  const queryParams = new URLSearchParams(window.location.search);
+
+  return Boolean(
+    hashParams.get("access_token") ||
+    hashParams.get("refresh_token") ||
+    hashParams.get("error") ||
+    queryParams.get("code") ||
+    queryParams.get("error")
+  );
+}
+
+function isXAuthSession(session) {
+  const appMetadata = session?.user?.app_metadata || {};
+  const providers = [
+    appMetadata.provider,
+    ...(Array.isArray(appMetadata.providers) ? appMetadata.providers : []),
+    ...(Array.isArray(session?.user?.identities)
+      ? session.user.identities.map((identity) => identity.provider)
+      : [])
+  ];
+
+  return providers.some((provider) => ["x", "twitter"].includes(String(provider || "").toLowerCase()));
+}
+
 function normalizeHandleForStore(handle) {
   return String(handle || "").trim().replace(/^@/, "").toLowerCase();
 }
@@ -927,7 +955,7 @@ async function signInWithX() {
     provider: "x",
     options: {
       scopes: "tweet.read users.read follows.read offline.access",
-      redirectTo: `${window.location.origin}/creator-onboarding.html`
+      redirectTo: getRedirectUrl("creator-onboarding.html")
     }
   });
 }
@@ -3194,12 +3222,26 @@ async function initAdminPage() {
 }
 
 async function bootApp() {
+  const arrivedFromAuthCallback = hasAuthCallbackParams();
+
   syncRateSliderMax();
   initMobileNav();
   initChameleonTheme();
   initScrollAnimations();
   currentSession = await getActiveSession();
   currentUserRole = currentSession?.user ? await getUserRole(currentSession.user.id) : "";
+
+  if (
+    arrivedFromAuthCallback &&
+    currentSession?.user &&
+    !currentUserRole &&
+    isXAuthSession(currentSession) &&
+    getPageName() !== "creator-onboarding.html"
+  ) {
+    window.location.replace(getRedirectUrl("creator-onboarding.html"));
+    return;
+  }
+
   creators = await fetchCreators();
   requests = currentSession?.user && currentUserRole === "brand"
     ? await fetchBrandCampaigns(currentSession.user.id)
