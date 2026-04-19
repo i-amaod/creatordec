@@ -31,8 +31,17 @@ const supabaseAdmin = createClient && SUPABASE_URL !== "YOUR_SUPABASE_URL" && SU
         autoRefreshToken: false,
         persistSession: false
       }
-    })
+  })
   : null;
+
+const runtimeConfig = {
+  hasSupabaseServiceRole: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+  xProfileProviders: {
+    xBearerToken: Boolean(X_BEARER_TOKEN),
+    twitterApiIo: Boolean(TWITTERAPI_IO_KEY),
+    socialData: Boolean(SOCIALDATA_API_KEY)
+  }
+};
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -271,6 +280,24 @@ function profileResponse(profile) {
   };
 }
 
+function profileFromXUser(user, fallbackHandle = "", provider = "X API") {
+  return profileResponse({
+    handle: user.username || fallbackHandle,
+    name: user.name || "",
+    avatarUrl: user.profile_image_url || "",
+    bio: user.description || "",
+    followers: user.public_metrics?.followers_count || null,
+    following: user.public_metrics?.following_count || null,
+    tweetCount: user.public_metrics?.tweet_count || null,
+    location: user.location || "",
+    verified: Boolean(user.verified),
+    pinnedTweet: "",
+    notableFollowers: "",
+    provider,
+    note: "Notable followers require elevated X API access or a separate enrichment provider."
+  });
+}
+
 function getCachedXProfile(handle) {
   if (!X_PROFILE_CACHE_TTL_MS) {
     return null;
@@ -349,20 +376,41 @@ async function fetchOfficialXProfile(handle) {
   }
 
   return profileResponse({
-    handle: user.username || handle,
-    name: user.name || "",
-    avatarUrl: user.profile_image_url || "",
-    bio: user.description || "",
-    followers: user.public_metrics?.followers_count || null,
-    following: user.public_metrics?.following_count || null,
-    tweetCount: user.public_metrics?.tweet_count || null,
-    location: user.location || "",
-    verified: Boolean(user.verified),
+    ...profileFromXUser(user, handle, "X API"),
     pinnedTweet,
-    notableFollowers: "",
-    provider: "X API",
     note: "Notable followers require elevated X API access or a separate enrichment provider."
   });
+}
+
+async function fetchXProfileWithUserToken(providerToken) {
+  const userFields = "description,location,profile_image_url,public_metrics,verified,username,name";
+  const urls = [
+    `https://api.x.com/2/users/me?user.fields=${encodeURIComponent(userFields)}`,
+    `https://api.twitter.com/2/users/me?user.fields=${encodeURIComponent(userFields)}`
+  ];
+  const errors = [];
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${providerToken}`
+        }
+      });
+
+      if (!response.ok) {
+        errors.push(`${new URL(url).hostname}: ${response.status}`);
+        continue;
+      }
+
+      const payload = await response.json();
+      return profileFromXUser(payload.data || {}, "", "X OAuth");
+    } catch (error) {
+      errors.push(`${new URL(url).hostname}: ${error.message}`);
+    }
+  }
+
+  throw new Error(`X OAuth profile request failed. ${errors.join("; ")}`);
 }
 
 async function fetchTwitterApiIoProfile(handle) {
@@ -887,6 +935,26 @@ async function deleteSupabaseCampaignRequests() {
 async function handleApi(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`);
   const db = readDb();
+
+  if (request.method === "GET" && url.pathname === "/api/health") {
+    return sendJson(response, 200, {
+      ok: true,
+      ...runtimeConfig
+    });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/x-me") {
+    try {
+      const body = await readBody(request);
+      if (!body.providerToken) {
+        return sendJson(response, 400, { error: "Missing provider token" });
+      }
+
+      return sendJson(response, 200, await fetchXProfileWithUserToken(body.providerToken));
+    } catch (error) {
+      return sendJson(response, 502, { error: error.message });
+    }
+  }
 
   if (request.method === "POST" && url.pathname === "/api/admin/login") {
     const body = await readBody(request);
