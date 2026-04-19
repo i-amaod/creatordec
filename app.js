@@ -657,7 +657,11 @@ function toDbCreator(creator, userId = creator.id) {
     availability: creator.availability || "Available this week",
     contact: creator.contact || "",
     example: creator.example || "",
-    is_public_profile: Boolean(creator.isPublicProfile || creator.is_public_profile),
+    is_public_profile: creator.isPublicProfile !== undefined
+      ? Boolean(creator.isPublicProfile)
+      : creator.is_public_profile !== undefined
+        ? Boolean(creator.is_public_profile)
+        : true,
     verified_campaign: Boolean(creator.verifiedCampaign || creator.verified_campaign),
     portfolio
   };
@@ -748,7 +752,6 @@ async function fetchCreators() {
   const { data, error } = await supabase
     .from("creators")
     .select("*")
-    .eq("is_public_profile", true)
     .order("sorsa_score", { ascending: false });
 
   if (error) {
@@ -770,15 +773,15 @@ async function fetchCreatorByHandle(handle) {
     .from("creators")
     .select("*")
     .eq("handle", normalizedHandle)
-    .eq("is_public_profile", true)
-    .maybeSingle();
+    .order("created_at", { ascending: false })
+    .limit(1);
 
   if (error) {
     showToast("Creator profile could not load.");
     return null;
   }
 
-  return toAppCreator(data);
+  return toAppCreator((data || [])[0]);
 }
 
 async function saveCreatorProfile(creator, userId = creator.id) {
@@ -803,46 +806,6 @@ async function saveCreatorProfile(creator, userId = creator.id) {
   const savedCreator = toAppCreator(data);
   creators = [savedCreator, ...creators.filter((item) => item.id !== savedCreator.id)];
   return savedCreator;
-}
-
-async function saveCreatorXDraftFromSession(xData, userId) {
-  const handle = normalizeHandleForStore(xData?.handle);
-  if (!handle || !userId) {
-    return null;
-  }
-
-  const [minRate, maxRate] = rateRanges[0];
-  return saveCreatorProfile({
-    id: userId,
-    name: xData.name || normalizeHandleForDisplay(handle) || "Creator",
-    handle: normalizeHandleForDisplay(handle),
-    minRate,
-    maxRate,
-    region: "Global",
-    availability: "Available this week",
-    example: "",
-    categories: [],
-    skillType: "Writing",
-    videoStyles: [],
-    contact: "",
-    bio: xData.bio || "",
-    portfolio: [],
-    isPublicProfile: false,
-    xProfile: {
-      handle,
-      avatarUrl: xData.avatarUrl || "",
-      bio: xData.bio || "",
-      followers: Number(xData.followers || 0),
-      following: Number(xData.following || 0),
-      tweetCount: Number(xData.tweetCount || 0),
-      location: xData.location || "",
-      verified: Boolean(xData.verified),
-      collectedAt: xData.collectedAt || new Date().toISOString(),
-      notableFollowers: xData.notableFollowers || "",
-      pinnedTweet: xData.pinnedTweet || "",
-      collected: true
-    }
-  }, userId);
 }
 
 async function refreshCreatorXData(creator) {
