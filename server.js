@@ -1,5 +1,6 @@
 const http = require("http");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { randomBytes, randomUUID } = require("crypto");
 
@@ -12,9 +13,7 @@ try {
 
 const PORT = Number(process.env.PORT || 3000);
 const DATA_DIR = path.join(__dirname, "data");
-const DB_PATH = path.join(DATA_DIR, "db.json");
-const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
-const X_PROFILE_CACHE_PATH = path.join(DATA_DIR, "x-profile-cache.json");
+const FALLBACK_DATA_DIR = path.join(os.tmpdir(), "crypto-creator-desk");
 const CAMPAIGN_DRAFT_BUCKET = "campaign-drafts";
 const CAMPAIGN_DRAFT_MAX_BYTES = Number(process.env.CAMPAIGN_DRAFT_MAX_BYTES || 50 * 1024 * 1024);
 const ADMIN_PASSCODE = process.env.ADMIN_PASSCODE || "admin123";
@@ -85,23 +84,70 @@ const contentTypes = {
   ".svg": "image/svg+xml"
 };
 
+let activeDataDir = "";
+
+function ensureDirectory(directoryPath) {
+  try {
+    if (fs.existsSync(directoryPath)) {
+      return fs.statSync(directoryPath).isDirectory();
+    }
+
+    fs.mkdirSync(directoryPath, { recursive: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getDataDir() {
+  if (activeDataDir && ensureDirectory(activeDataDir)) {
+    return activeDataDir;
+  }
+
+  if (ensureDirectory(DATA_DIR)) {
+    activeDataDir = DATA_DIR;
+    return activeDataDir;
+  }
+
+  if (!ensureDirectory(FALLBACK_DATA_DIR)) {
+    const error = new Error("Local data storage is not writable.");
+    error.statusCode = 503;
+    throw error;
+  }
+
+  activeDataDir = FALLBACK_DATA_DIR;
+  return activeDataDir;
+}
+
+function getDbPath() {
+  return path.join(getDataDir(), "db.json");
+}
+
+function getUploadDir() {
+  return path.join(getDataDir(), "uploads");
+}
+
+function getXProfileCachePath() {
+  return path.join(getDataDir(), "x-profile-cache.json");
+}
+
 function ensureDb() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  const uploadDir = getUploadDir();
+  if (!ensureDirectory(uploadDir)) {
+    const error = new Error("Upload storage is not writable.");
+    error.statusCode = 503;
+    throw error;
   }
 
-  if (!fs.existsSync(UPLOAD_DIR)) {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  }
-
-  if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify({ creators: [], requests: [], shortlists: [], projectAccess: [] }, null, 2));
+  const dbPath = getDbPath();
+  if (!fs.existsSync(dbPath)) {
+    fs.writeFileSync(dbPath, JSON.stringify({ creators: [], requests: [], shortlists: [], projectAccess: [] }, null, 2));
   }
 }
 
 function readDb() {
   ensureDb();
-  const db = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+  const db = JSON.parse(fs.readFileSync(getDbPath(), "utf8"));
   return {
     creators: [],
     requests: [],
@@ -113,18 +159,18 @@ function readDb() {
 
 function writeDb(db) {
   ensureDb();
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+  fs.writeFileSync(getDbPath(), JSON.stringify(db, null, 2));
 }
 
 function readXProfileCache() {
-  ensureDb();
+  const cachePath = getXProfileCachePath();
 
-  if (!fs.existsSync(X_PROFILE_CACHE_PATH)) {
+  if (!fs.existsSync(cachePath)) {
     return { profiles: {} };
   }
 
   try {
-    const cache = JSON.parse(fs.readFileSync(X_PROFILE_CACHE_PATH, "utf8"));
+    const cache = JSON.parse(fs.readFileSync(cachePath, "utf8"));
     return cache && typeof cache === "object" && cache.profiles
       ? cache
       : { profiles: {} };
@@ -134,8 +180,11 @@ function readXProfileCache() {
 }
 
 function writeXProfileCache(cache) {
-  ensureDb();
-  fs.writeFileSync(X_PROFILE_CACHE_PATH, JSON.stringify(cache, null, 2));
+  try {
+    fs.writeFileSync(getXProfileCachePath(), JSON.stringify(cache, null, 2));
+  } catch {
+    // Cache writes are optional. Live profile lookup should still succeed.
+  }
 }
 
 function sendJson(response, statusCode, payload, request = null) {
@@ -982,7 +1031,6 @@ async function deleteSupabaseCampaignRequests() {
 
 async function handleApi(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`);
-  const db = readDb();
 
   if (request.method === "GET" && url.pathname === "/api/health") {
     return sendJson(response, 200, {
@@ -1004,6 +1052,23 @@ async function handleApi(request, response) {
       return sendJson(response, 502, { error: error.message }, request);
     }
   }
+
+  if (request.method === "GET" && url.pathname === "/api/x-profile") {
+    const handle = url.searchParams.get("handle");
+    if (!handle) {
+      return sendJson(response, 400, { error: "Missing handle" });
+    }
+
+    try {
+      const forceRefresh = ["1", "true", "yes"].includes(String(url.searchParams.get("refresh") || url.searchParams.get("force") || "").toLowerCase());
+      logInfo("x_profile_requested", { handle, forceRefresh });
+      return sendJson(response, 200, await fetchXProfile(handle, { forceRefresh }));
+    } catch (error) {
+      return sendJson(response, 502, { error: error.message });
+    }
+  }
+
+  const db = readDb();
 
   if (request.method === "POST" && url.pathname === "/api/admin/login") {
     const body = await readBody(request);
@@ -1234,21 +1299,6 @@ async function handleApi(request, response) {
     db.requests = [];
     writeDb(db);
     return sendJson(response, 200, db.requests);
-  }
-
-  if (request.method === "GET" && url.pathname === "/api/x-profile") {
-    const handle = url.searchParams.get("handle");
-    if (!handle) {
-      return sendJson(response, 400, { error: "Missing handle" });
-    }
-
-    try {
-      const forceRefresh = ["1", "true", "yes"].includes(String(url.searchParams.get("refresh") || url.searchParams.get("force") || "").toLowerCase());
-      logInfo("x_profile_requested", { handle, forceRefresh });
-      return sendJson(response, 200, await fetchXProfile(handle, { forceRefresh }));
-    } catch (error) {
-      return sendJson(response, 502, { error: error.message });
-    }
   }
 
   return sendJson(response, 404, { error: "API route not found" });
