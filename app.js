@@ -589,6 +589,15 @@ function calculateSorsaScore(creator) {
   return Math.min(score, 99);
 }
 
+function normalizeSorsaScore(value, fallback = 50) {
+  const score = Number(value);
+  if (!Number.isFinite(score)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
 function toAppCreator(row) {
   if (!row) {
     return null;
@@ -600,7 +609,7 @@ function toAppCreator(row) {
     handle: normalizeHandleForDisplay(row.handle),
     minRate: Number(row.min_rate || 0),
     maxRate: row.max_rate === null ? Infinity : Number(row.max_rate || 0),
-    sorsaScore: Number(row.sorsa_score || 50),
+    sorsaScore: normalizeSorsaScore(row.sorsa_score, 50),
     region: row.region || "Global",
     availability: row.availability || "Available this week",
     example: row.example || "",
@@ -665,7 +674,7 @@ function toDbCreator(creator, userId = creator.id) {
     portfolio
   };
 
-  dbCreator.sorsa_score = calculateSorsaScore(dbCreator);
+  dbCreator.sorsa_score = normalizeSorsaScore(creator.sorsaScore ?? creator.sorsa_score, calculateSorsaScore(dbCreator));
   return dbCreator;
 }
 
@@ -751,6 +760,7 @@ async function fetchCreators() {
   const { data, error } = await supabase
     .from("creators")
     .select("*")
+    .eq("is_public_profile", true)
     .order("sorsa_score", { ascending: false });
 
   if (error) {
@@ -772,6 +782,7 @@ async function fetchCreatorByHandle(handle) {
     .from("creators")
     .select("*")
     .eq("handle", normalizedHandle)
+    .eq("is_public_profile", true)
     .order("created_at", { ascending: false })
     .limit(1);
 
@@ -1145,6 +1156,36 @@ function formatStoredRate(minRate, maxRate) {
   }
 
   return `${money(minRate)} - ${money(maxRate)}`;
+}
+
+function calculateSelectedBudgetRange(selectedCreators) {
+  return selectedCreators.reduce((total, creator) => {
+    const minRate = Number(creator.minRate || 0);
+    const rawMaxRate = creator.maxRate === null ? Infinity : creator.maxRate;
+    const maxRate = rawMaxRate === Infinity ? Infinity : Number(rawMaxRate || 0);
+
+    return {
+      min: total.min + minRate,
+      max: total.max === Infinity || maxRate === Infinity ? Infinity : total.max + maxRate
+    };
+  }, { min: 0, max: 0 });
+}
+
+function formatSelectedBudgetEstimate(selectedCreators) {
+  if (!selectedCreators.length) {
+    return "$0";
+  }
+
+  const { min, max } = calculateSelectedBudgetRange(selectedCreators);
+  if (max === Infinity) {
+    return `${money(min)}+`;
+  }
+
+  if (min === max) {
+    return money(min);
+  }
+
+  return `${money(min)} - ${money(max)}`;
 }
 
 function isCreatorInSelectedPriceRange(creator, minBudget, maxBudget) {
@@ -1811,6 +1852,10 @@ async function initCreatorDashboard() {
             </select>
           </label>
         </div>
+        <label>
+          Sorsa score
+          <input type="number" id="dashboardSorsaScore" min="0" max="100" step="1" value="${escapeHtml(activeCreator.sorsaScore)}" required>
+        </label>
         <label class="range-field">
           Pay range per post
           <input type="range" id="dashboardRateRange" min="0" max="${rateRanges.length - 1}" step="1" value="${getRateRangeIndex(activeCreator.minRate, activeCreator.maxRate)}">
@@ -1901,6 +1946,7 @@ async function initCreatorDashboard() {
     const visibilityInput = document.querySelector("#dashboardVisibility");
     const regionSelect = document.querySelector("#dashboardRegion");
     const skillSelect = document.querySelector("#dashboardSkill");
+    const sorsaInput = document.querySelector("#dashboardSorsaScore");
     const videoOptions = document.querySelector("#dashboardVideoOptions");
     const rateRange = document.querySelector("#dashboardRateRange");
     const rateLabel = document.querySelector("#dashboardRateLabel");
@@ -1910,6 +1956,7 @@ async function initCreatorDashboard() {
     renderRegionSelect(regionSelect);
     regionSelect.value = activeCreator.region || "Global";
     skillSelect.value = activeCreator.skillType || "Writing";
+    sorsaInput.value = normalizeSorsaScore(activeCreator.sorsaScore, 50);
     toggleVideoOptions(skillSelect, videoOptions);
     setRangeLabel(rateRange, rateLabel);
     renderPortfolio(activeCreator);
@@ -1987,6 +2034,7 @@ async function initCreatorDashboard() {
           ...activeCreator,
           minRate,
           maxRate,
+          sorsaScore: normalizeSorsaScore(sorsaInput.value, activeCreator.sorsaScore),
           region: regionSelect.value,
           contact: document.querySelector("#dashboardContact").value.trim(),
           example: document.querySelector("#dashboardExample").value.trim(),
@@ -2303,6 +2351,7 @@ async function initProjectsPage() {
   const creatorList = document.querySelector("#creatorList");
   const resultTitle = document.querySelector("#resultTitle");
   const selectedSummary = document.querySelector("#selectedSummary");
+  const selectedBudgetEstimate = document.querySelector("#selectedBudgetEstimate");
   const comparisonPanel = document.querySelector("#comparisonPanel");
   const sortCreators = document.querySelector("#sortCreators");
   const minSorsaFilter = document.querySelector("#minSorsaFilter");
@@ -2671,7 +2720,7 @@ async function initProjectsPage() {
     comparisonPanel.innerHTML = `
       <div>
         <strong>Compare shortlist</strong>
-        <span>${selectedCreators.length} creators selected</span>
+        <span>${selectedCreators.length} creators selected | ${formatSelectedBudgetEstimate(selectedCreators)} estimated total</span>
       </div>
       <div class="compare-grid">
         ${selectedCreators.map((creator) => `
@@ -2771,16 +2820,21 @@ async function initProjectsPage() {
 
   function renderSelection() {
     const selectedCreators = creators.filter((creator) => selectedCreatorIds.has(creator.id));
+    const budgetEstimate = formatSelectedBudgetEstimate(selectedCreators);
     submitRequestButton.disabled = selectedCreators.length === 0;
 
     selectedSummary.textContent = selectedCreators.length
       ? selectedCreators.map((creator) => creator.name).join(", ")
       : "No creators selected yet.";
 
+    if (selectedBudgetEstimate) {
+      selectedBudgetEstimate.textContent = budgetEstimate;
+    }
+
     if (mobileSelectedCount) {
       mobileSelectedCount.textContent = selectedCreators.length === 1
-        ? "1 selected"
-        : `${selectedCreators.length} selected`;
+        ? `1 selected | ${budgetEstimate}`
+        : `${selectedCreators.length} selected | ${budgetEstimate}`;
     }
 
     if (mobileSubmitButton) {
@@ -3141,6 +3195,7 @@ async function initCreatorOnboardingPage() {
   const categoryOptions = document.querySelector("#onboardingCategoryOptions");
   const rateRange = document.querySelector("#onboardingRateRange");
   const rateLabel = document.querySelector("#onboardingRateLabel");
+  const sorsaInput = document.querySelector("#onboardingSorsaScore");
   const skillSelect = document.querySelector("#onboardingSkill");
   const videoOptions = document.querySelector("#onboardingVideoOptions");
   const regionSelect = document.querySelector("#onboardingRegion");
@@ -3231,6 +3286,7 @@ async function initCreatorOnboardingPage() {
         handle: normalizeHandleForDisplay(formHandle),
         minRate,
         maxRate,
+        sorsaScore: normalizeSorsaScore(sorsaInput?.value, 50),
         region: regionSelect.value,
         availability: document.querySelector("#onboardingAvailability").value,
         example: document.querySelector("#onboardingExample").value.trim(),
