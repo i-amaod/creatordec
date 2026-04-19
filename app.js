@@ -124,8 +124,7 @@ function getApiUrl(path) {
   const configuredOrigin = window.CREATOR_DESK_API_ORIGIN || "";
   const hostname = window.location.hostname;
   const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "";
-  const isRailwayHost = hostname.endsWith(".up.railway.app");
-  const apiOrigin = configuredOrigin || (!isLocalHost && !isRailwayHost ? DEFAULT_PRODUCTION_API_ORIGIN : "");
+  const apiOrigin = configuredOrigin || (isLocalHost ? "" : DEFAULT_PRODUCTION_API_ORIGIN);
   return `${apiOrigin}${path}`;
 }
 
@@ -827,6 +826,10 @@ async function refreshCreatorXData(creator) {
   const sessionXData = await getXDataFromSession(refreshedSession);
   const fallbackHandle = normalizeHandleForStore(sessionXData.handle || creator.xProfile?.handle || creator.handle);
   const xData = await enrichXDataByHandle(fallbackHandle, sessionXData, { forceRefresh: true });
+  if (!hasLiveXProfile(xData) && xData.note) {
+    throw new Error(xData.note);
+  }
+
   const updatedCreator = mergeCreatorWithXData(creator, xData);
   return saveCreatorProfile(updatedCreator, refreshedSession.user.id);
 }
@@ -925,7 +928,7 @@ async function fetchBrandCampaigns(brandId) {
   return (data || []).map(toAppCampaign);
 }
 
-async function fetchCreatorCampaigns(creatorId) {
+async function fetchCreatorCampaigns(creatorId, options = {}) {
   if (!creatorId) {
     return [];
   }
@@ -947,7 +950,9 @@ async function fetchCreatorCampaigns(creatorId) {
     .eq("creator_id", creatorId);
 
   if (error) {
-    showToast("Incoming requests could not load.");
+    if (!options.silent) {
+      showToast("Incoming requests could not load.");
+    }
     return apiCampaigns;
   }
 
@@ -1275,7 +1280,11 @@ async function requestXProfileEnrichment(handle, options = {}) {
 
   const response = await fetch(getApiUrl(`/api/x-profile?${params.toString()}`));
   if (!response.ok) {
-    throw new Error("X enrichment endpoint is not available yet.");
+    const contentType = response.headers.get("content-type") || "";
+    const errorPayload = contentType.includes("application/json")
+      ? await response.json()
+      : await response.text();
+    throw new Error(errorPayload?.error || errorPayload || "X enrichment endpoint is not available yet.");
   }
 
   return response.json();
@@ -1759,7 +1768,7 @@ async function initCreatorDashboard() {
   }
 
   async function renderCreatorDashboard(activeCreator) {
-    const incomingRequests = await fetchCreatorCampaigns(activeCreator.id);
+    const incomingRequests = await fetchCreatorCampaigns(activeCreator.id, { silent: true });
     output.innerHTML = `
       ${renderCreatorXIntel(activeCreator.xProfile, { name: activeCreator.name, showRefreshButton: true, avatarSize: 64 })}
       <section class="panel stacked-form">
