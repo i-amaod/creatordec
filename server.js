@@ -19,12 +19,22 @@ const CAMPAIGN_DRAFT_BUCKET = "campaign-drafts";
 const CAMPAIGN_DRAFT_MAX_BYTES = Number(process.env.CAMPAIGN_DRAFT_MAX_BYTES || 50 * 1024 * 1024);
 const ADMIN_PASSCODE = process.env.ADMIN_PASSCODE || "admin123";
 const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN || "";
-const TWITTERAPI_IO_KEY = process.env.TWITTERAPI_IO_KEY || "";
+const TWITTERAPI_IO_KEY =
+  process.env.TWITTERAPI_IO_KEY ||
+  process.env.TWITTERAPI_IO_API_KEY ||
+  process.env.TWITTER_API_IO_KEY ||
+  process.env.TWITTERAPI_KEY ||
+  process.env.TWITTER_API_KEY ||
+  "";
 const SOCIALDATA_API_KEY = process.env.SOCIALDATA_API_KEY || "";
 const X_PROFILE_CACHE_TTL_HOURS = Number(process.env.X_PROFILE_CACHE_TTL_HOURS || 24);
 const X_PROFILE_CACHE_TTL_MS = Math.max(0, X_PROFILE_CACHE_TTL_HOURS) * 60 * 60 * 1000;
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://tioxocilqbmcixrgbyac.supabase.co";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const ALLOWED_ORIGINS = String(process.env.ALLOWED_ORIGINS || "*")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 const supabaseAdmin = createClient && SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_SERVICE_ROLE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: {
@@ -37,11 +47,31 @@ const supabaseAdmin = createClient && SUPABASE_URL !== "YOUR_SUPABASE_URL" && SU
 const runtimeConfig = {
   hasSupabaseServiceRole: Boolean(SUPABASE_SERVICE_ROLE_KEY),
   xProfileProviders: {
+    preferred: TWITTERAPI_IO_KEY ? "TwitterAPI.io" : X_BEARER_TOKEN ? "X API" : SOCIALDATA_API_KEY ? "SocialData" : "",
     xBearerToken: Boolean(X_BEARER_TOKEN),
     twitterApiIo: Boolean(TWITTERAPI_IO_KEY),
     socialData: Boolean(SOCIALDATA_API_KEY)
   }
 };
+
+function getCorsOrigin(request) {
+  if (ALLOWED_ORIGINS.includes("*")) {
+    return "*";
+  }
+
+  const origin = request.headers.origin || "";
+  return ALLOWED_ORIGINS.includes(origin) ? origin : "";
+}
+
+function getCorsHeaders(request) {
+  const origin = getCorsOrigin(request);
+  return {
+    ...(origin ? { "Access-Control-Allow-Origin": origin } : {}),
+    "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-File-Name, X-Content-Type",
+    "Access-Control-Max-Age": "86400"
+  };
+}
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -108,9 +138,21 @@ function writeXProfileCache(cache) {
   fs.writeFileSync(X_PROFILE_CACHE_PATH, JSON.stringify(cache, null, 2));
 }
 
-function sendJson(response, statusCode, payload) {
-  response.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
+function sendJson(response, statusCode, payload, request = null) {
+  response.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    ...(request ? getCorsHeaders(request) : {})
+  });
   response.end(JSON.stringify(payload));
+}
+
+function logInfo(message, context = {}) {
+  console.log(JSON.stringify({
+    level: "info",
+    message,
+    ...context,
+    at: new Date().toISOString()
+  }));
 }
 
 function readBody(request) {
@@ -349,6 +391,7 @@ async function fetchOfficialXProfile(handle) {
     return null;
   }
 
+  logInfo("x_profile_official_lookup_started", { handle });
   const userUrl = new URL(`https://api.x.com/2/users/by/username/${encodeURIComponent(handle)}`);
   userUrl.searchParams.set("user.fields", "public_metrics,pinned_tweet_id,description,location,profile_image_url,verified,username,name");
 
@@ -356,6 +399,7 @@ async function fetchOfficialXProfile(handle) {
     headers: { Authorization: `Bearer ${X_BEARER_TOKEN}` }
   });
 
+  logInfo("x_profile_official_lookup_finished", { handle, status: userResponse.status });
   if (!userResponse.ok) {
     throw new Error(`X API request failed with ${userResponse.status}`);
   }
@@ -392,12 +436,14 @@ async function fetchXProfileWithUserToken(providerToken) {
 
   for (const url of urls) {
     try {
+      logInfo("x_oauth_profile_lookup_started", { host: new URL(url).hostname });
       const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${providerToken}`
         }
       });
 
+      logInfo("x_oauth_profile_lookup_finished", { host: new URL(url).hostname, status: response.status });
       if (!response.ok) {
         errors.push(`${new URL(url).hostname}: ${response.status}`);
         continue;
@@ -421,10 +467,12 @@ async function fetchTwitterApiIoProfile(handle) {
   const profileUrl = new URL("https://api.twitterapi.io/twitter/user/info");
   profileUrl.searchParams.set("userName", handle);
 
+  logInfo("twitterapi_io_profile_lookup_started", { handle });
   const profileResponseRaw = await fetch(profileUrl, {
     headers: { "X-API-Key": TWITTERAPI_IO_KEY }
   });
 
+  logInfo("twitterapi_io_profile_lookup_finished", { handle, status: profileResponseRaw.status });
   if (!profileResponseRaw.ok) {
     throw new Error(`TwitterAPI.io request failed with ${profileResponseRaw.status}`);
   }
@@ -503,9 +551,9 @@ async function fetchXProfile(handle, options = {}) {
 
   const errors = [];
   const providers = [
-    { name: "X API", fetchProfile: fetchOfficialXProfile },
     { name: "TwitterAPI.io", fetchProfile: fetchTwitterApiIoProfile },
-    { name: "SocialData", fetchProfile: fetchSocialDataProfile }
+    { name: "SocialData", fetchProfile: fetchSocialDataProfile },
+    { name: "X API", fetchProfile: fetchOfficialXProfile }
   ];
 
   for (const provider of providers) {
@@ -940,19 +988,20 @@ async function handleApi(request, response) {
     return sendJson(response, 200, {
       ok: true,
       ...runtimeConfig
-    });
+    }, request);
   }
 
   if (request.method === "POST" && url.pathname === "/api/x-me") {
     try {
       const body = await readBody(request);
       if (!body.providerToken) {
-        return sendJson(response, 400, { error: "Missing provider token" });
+        return sendJson(response, 400, { error: "Missing provider token" }, request);
       }
 
-      return sendJson(response, 200, await fetchXProfileWithUserToken(body.providerToken));
+      logInfo("x_me_requested");
+      return sendJson(response, 200, await fetchXProfileWithUserToken(body.providerToken), request);
     } catch (error) {
-      return sendJson(response, 502, { error: error.message });
+      return sendJson(response, 502, { error: error.message }, request);
     }
   }
 
@@ -1195,6 +1244,7 @@ async function handleApi(request, response) {
 
     try {
       const forceRefresh = ["1", "true", "yes"].includes(String(url.searchParams.get("refresh") || url.searchParams.get("force") || "").toLowerCase());
+      logInfo("x_profile_requested", { handle, forceRefresh });
       return sendJson(response, 200, await fetchXProfile(handle, { forceRefresh }));
     } catch (error) {
       return sendJson(response, 502, { error: error.message });
@@ -1205,6 +1255,16 @@ async function handleApi(request, response) {
 }
 
 const server = http.createServer((request, response) => {
+  Object.entries(getCorsHeaders(request)).forEach(([header, value]) => {
+    response.setHeader(header, value);
+  });
+
+  if (request.method === "OPTIONS") {
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+
   if (request.url.startsWith("/api/")) {
     handleApi(request, response).catch((error) => {
       sendJson(response, 500, { error: error.message });
