@@ -1089,6 +1089,37 @@ legend span {
   color: var(--muted);
 }
 
+.shortlist-estimate {
+  min-width: min(100%, 180px);
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.shortlist-estimate span,
+.shortlist-estimate small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.shortlist-estimate strong {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--ink);
+  font-family: "Archivo", Arial, sans-serif;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.shortlist-estimate small {
+  margin-top: 0.35rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .tracking-code-panel {
   display: grid;
   gap: 0.5rem;
