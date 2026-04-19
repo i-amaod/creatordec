@@ -3172,15 +3172,6 @@ async function initCreatorOnboardingPage() {
   }
 
   const xData = await getXDataFromSession(currentSession, { forceRefresh: true });
-  if (xData.handle) {
-    try {
-      await saveCreatorXDraftFromSession(xData, currentSession.user.id);
-      currentUserRole = "creator";
-    } catch (error) {
-      console.warn("Creator X draft could not be saved.", error);
-    }
-  }
-
   document.querySelector("#onboardingName").value = xData.name || "";
   document.querySelector("#onboardingHandle").value = normalizeHandleForDisplay(xData.handle);
   document.querySelector("#onboardingBio").value = xData.bio || "";
@@ -3236,8 +3227,8 @@ async function initCreatorOnboardingPage() {
       const savedXData = await enrichXDataByHandle(formHandle, xData, { forceRefresh: true });
       await saveCreatorProfile({
         id: currentSession.user.id,
-        name: document.querySelector("#onboardingName").value.trim() || savedXData.name || "",
-        handle,
+        name: document.querySelector("#onboardingName").value.trim() || savedXData.name || normalizeHandleForDisplay(formHandle),
+        handle: normalizeHandleForDisplay(formHandle),
         minRate,
         maxRate,
         region: regionSelect.value,
@@ -3249,7 +3240,7 @@ async function initCreatorOnboardingPage() {
         contact: document.querySelector("#onboardingContact").value.trim(),
         bio: document.querySelector("#onboardingBio").value.trim(),
         portfolio: [],
-        isPublicProfile: false,
+        isPublicProfile: true,
         xProfile: {
           handle: formHandle || savedXData.handle,
           avatarUrl: savedXData.avatarUrl,
