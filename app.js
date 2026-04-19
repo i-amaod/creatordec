@@ -396,29 +396,38 @@ async function getXDataFromSession(session) {
     return mergedXData;
   }
 
+  return enrichXDataByHandle(mergedXData.handle, mergedXData);
+}
+
+async function enrichXDataByHandle(handle, fallbackXData = {}) {
+  const normalizedHandle = normalizeHandleForStore(handle || fallbackXData.handle);
+  if (!normalizedHandle) {
+    return fallbackXData;
+  }
+
   try {
-    const backendXData = await requestXProfileEnrichment(mergedXData.handle);
+    const backendXData = await requestXProfileEnrichment(normalizedHandle);
     if (!hasLiveXProfile(backendXData)) {
-      return backendXData?.note ? { ...mergedXData, note: backendXData.note } : mergedXData;
+      return backendXData?.note ? { ...fallbackXData, handle: normalizedHandle, note: backendXData.note } : { ...fallbackXData, handle: normalizedHandle };
     }
 
     return {
-      ...mergedXData,
+      ...fallbackXData,
       ...backendXData,
-      name: backendXData.name || mergedXData.name,
-      handle: backendXData.handle || mergedXData.handle,
-      avatarUrl: backendXData.avatarUrl || mergedXData.avatarUrl,
-      bio: backendXData.bio || mergedXData.bio,
-      followers: backendXData.followers ?? mergedXData.followers,
-      following: backendXData.following ?? mergedXData.following,
-      tweetCount: backendXData.tweetCount ?? mergedXData.tweetCount,
-      location: backendXData.location || mergedXData.location,
-      verified: Boolean(backendXData.verified || mergedXData.verified),
+      name: backendXData.name || fallbackXData.name,
+      handle: backendXData.handle || normalizedHandle,
+      avatarUrl: backendXData.avatarUrl || fallbackXData.avatarUrl,
+      bio: backendXData.bio || fallbackXData.bio,
+      followers: backendXData.followers ?? fallbackXData.followers,
+      following: backendXData.following ?? fallbackXData.following,
+      tweetCount: backendXData.tweetCount ?? fallbackXData.tweetCount,
+      location: backendXData.location || fallbackXData.location,
+      verified: Boolean(backendXData.verified || fallbackXData.verified),
       collectedAt: backendXData.collectedAt || new Date().toISOString(),
       collected: true
     };
   } catch {
-    return mergedXData;
+    return { ...fallbackXData, handle: normalizedHandle };
   }
 }
 
@@ -808,7 +817,9 @@ async function refreshCreatorXData(creator) {
   }
 
   currentSession = refreshedSession;
-  const xData = await getXDataFromSession(refreshedSession);
+  const sessionXData = await getXDataFromSession(refreshedSession);
+  const fallbackHandle = normalizeHandleForStore(sessionXData.handle || creator.xProfile?.handle || creator.handle);
+  const xData = await enrichXDataByHandle(fallbackHandle, sessionXData);
   const updatedCreator = mergeCreatorWithXData(creator, xData);
   return saveCreatorProfile(updatedCreator, refreshedSession.user.id);
 }
@@ -1260,7 +1271,22 @@ async function requestXProfileEnrichment(handle) {
 
 function renderCreatorXIntel(profile, options = {}) {
   if (!profile?.url && !profile?.handle && !profile?.followers && !profile?.following && !profile?.tweetCount && !profile?.location && !profile?.avatarUrl && !profile?.bio && !profile?.pinnedTweet && !profile?.notableFollowers) {
-    return "";
+    if (!options.showRefreshButton) {
+      return "";
+    }
+
+    return `
+      <div class="x-intel-card">
+        <div class="x-intel-heading">
+          <div>
+            <strong>${escapeHtml(options.name || "X profile")}</strong>
+            <span>X data has not been collected yet.</span>
+          </div>
+          <button class="button subtle" id="refreshXData" type="button" data-refresh-x-data>Refresh X data</button>
+        </div>
+        <p>Use refresh to pull the latest creator profile from TwitterAPI.io.</p>
+      </div>
+    `;
   }
 
   const displayName = options.name || profile.name || "X profile";
@@ -3145,9 +3171,11 @@ async function initCreatorOnboardingPage() {
     }
 
     try {
+      const formHandle = normalizeHandleForStore(handle) || xData.handle;
+      const savedXData = await enrichXDataByHandle(formHandle, xData);
       await saveCreatorProfile({
         id: currentSession.user.id,
-        name: document.querySelector("#onboardingName").value.trim(),
+        name: document.querySelector("#onboardingName").value.trim() || savedXData.name || "",
         handle,
         minRate,
         maxRate,
@@ -3161,17 +3189,17 @@ async function initCreatorOnboardingPage() {
         bio: document.querySelector("#onboardingBio").value.trim(),
         portfolio: [],
         xProfile: {
-          handle: normalizeHandleForStore(handle) || xData.handle,
-          avatarUrl: xData.avatarUrl,
-          bio: xData.bio,
-          followers: xData.followers,
-          following: xData.following,
-          tweetCount: xData.tweetCount,
-          location: xData.location,
-          verified: xData.verified,
-          collectedAt: new Date().toISOString(),
-          notableFollowers: "",
-          pinnedTweet: "",
+          handle: formHandle || savedXData.handle,
+          avatarUrl: savedXData.avatarUrl,
+          bio: savedXData.bio,
+          followers: savedXData.followers,
+          following: savedXData.following,
+          tweetCount: savedXData.tweetCount,
+          location: savedXData.location,
+          verified: savedXData.verified,
+          collectedAt: savedXData.collectedAt || new Date().toISOString(),
+          notableFollowers: savedXData.notableFollowers || "",
+          pinnedTweet: savedXData.pinnedTweet || "",
           collected: true
         }
       }, currentSession.user.id);
