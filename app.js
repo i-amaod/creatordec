@@ -256,13 +256,24 @@ function hasLiveXProfile(profile = {}) {
   );
 }
 
+function getFirstMetadataValue(meta = {}, ...keys) {
+  for (const key of keys) {
+    const value = meta?.[key];
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+
+  return "";
+}
+
 function extractXDataFromMetadata(meta = {}) {
   const publicMetrics = meta.public_metrics || {};
   return {
-    name: meta.full_name || meta.name || meta.display_name || "",
-    handle: normalizeHandleForStore(meta.user_name || meta.username || meta.preferred_username || meta.nickname || meta.screen_name || ""),
-    avatarUrl: meta.avatar_url || meta.picture || meta.profile_image_url || meta.profile_image_url_https || "",
-    bio: meta.description || meta.bio || "",
+    name: getFirstMetadataValue(meta, "full_name", "name", "display_name"),
+    handle: normalizeHandleForStore(getFirstMetadataValue(meta, "user_name", "userName", "username", "preferred_username", "nickname", "screen_name", "screenName")),
+    avatarUrl: getFirstMetadataValue(meta, "avatar_url", "avatarUrl", "picture", "profile_image_url", "profileImageUrl", "profile_image_url_https", "profilePicture"),
+    bio: getFirstMetadataValue(meta, "description", "bio"),
     followers: getMetricValue(publicMetrics, "followers_count", "followers") || getMetricValue(meta, "followers_count", "followers"),
     following: getMetricValue(publicMetrics, "following_count", "following") || getMetricValue(meta, "following_count", "following", "friends_count"),
     tweetCount: getMetricValue(publicMetrics, "tweet_count", "tweets") || getMetricValue(meta, "tweet_count", "tweets", "statuses_count"),
@@ -281,6 +292,15 @@ async function fetchXDataFromProviderToken(session) {
   const providerToken = session?.provider_token;
   if (!providerToken) {
     return null;
+  }
+
+  try {
+    const backendProfile = await sendApiStrict("/api/x-me", "POST", { providerToken });
+    if (hasLiveXProfile(backendProfile)) {
+      return backendProfile;
+    }
+  } catch {
+    // Fall back to a direct provider-token request below when the backend is unavailable.
   }
 
   const userFields = "description,location,profile_image_url,public_metrics,verified,username,name";
@@ -325,7 +345,7 @@ async function getXDataFromSession(session) {
   try {
     const backendXData = await requestXProfileEnrichment(mergedXData.handle);
     if (!hasLiveXProfile(backendXData)) {
-      return mergedXData;
+      return backendXData?.note ? { ...mergedXData, note: backendXData.note } : mergedXData;
     }
 
     return {
@@ -3026,7 +3046,7 @@ async function initCreatorOnboardingPage() {
       label: xData.cached
         ? `Cached profile data${xData.provider ? ` from ${xData.provider}` : ""}`
         : xData.provider ? `Data collected from ${xData.provider}` : "Data collected directly from X"
-    }) || '<div class="x-intel-card"><p>No X profile data was returned yet. You can still complete the profile manually.</p></div>';
+    }) || `<div class="x-intel-card"><p>No X profile data was returned yet. You can still complete the profile manually.</p>${xData.note ? `<p>${escapeHtml(xData.note)}</p>` : ""}</div>`;
   }
   renderCategoryCheckboxes(categoryOptions);
   renderRegionSelect(regionSelect);
