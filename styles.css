@@ -949,6 +949,35 @@ legend span {
   accent-color: var(--black);
 }
 
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.toggle-row span,
+.toggle-row small {
+  display: block;
+}
+
+.toggle-row small {
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.toggle-row input {
+  width: auto;
+  min-height: auto;
+  accent-color: var(--black);
+}
+
 .range-field,
 .x-profile-box,
 .shortlist-box,
