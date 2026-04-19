@@ -174,9 +174,9 @@
               <span id="selectedSummary">No creators selected yet.</span>
             </div>
             <div class="shortlist-estimate" aria-live="polite">
-              <span>Estimated total</span>
+              <span>Estimated creator spend</span>
               <strong id="selectedBudgetEstimate">$0</strong>
-              <small>Based on each selected creator's rate per post.</small>
+              <small>Planning estimate only. This helps you budget selected creators before the agency confirms final rates.</small>
             </div>
             <div class="button-row">
               <input type="text" id="shortlistName" placeholder="Shortlist name">
@@ -203,14 +203,14 @@
               Sort
               <select id="sortCreators">
                 <option value="recommended">Recommended</option>
-                <option value="score">Highest Sorsa</option>
+                <option value="score">Highest trust</option>
                 <option value="price-low">Lowest price</option>
                 <option value="followers">Highest reach</option>
               </select>
             </label>
             <label class="mini-filter">
-              Min score
-              <input type="number" id="minSorsaFilter" min="0" max="100" step="1" placeholder="0">
+              Min trust
+              <input type="number" id="minSorsaFilter" min="0" max="6000" step="1" placeholder="0">
             </label>
             <label class="mini-filter">
               Availability
@@ -223,6 +223,11 @@
             </label>
             <button class="button subtle" id="clearSelection" type="button">Clear shortlist</button>
           </div>
+        </div>
+        <div class="trust-key" aria-label="Trust score guide">
+          <span class="trust-icon" aria-hidden="true">TL</span>
+          <strong>Trust level</strong>
+          <span>Sorsa ranks creator trust from 0 to 6,000. Lower scores mean lower trust.</span>
         </div>
         <div class="comparison-panel is-hidden" id="comparisonPanel"></div>
         <div class="creator-list" id="creatorList" aria-live="polite"></div>
