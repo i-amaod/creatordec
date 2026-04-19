@@ -152,7 +152,7 @@ async function sendApi(path, method = "GET", payload) {
 
 async function sendApiStrict(path, method = "GET", payload, options = {}) {
   if (!canUseBackend()) {
-    throw new Error("Backend server is required for permanent Supabase storage.");
+    throw new Error("File uploads are not available yet.");
   }
 
   const headers = {
@@ -752,7 +752,7 @@ async function getUserRole(userId) {
   return "";
 }
 
-async function fetchCreators() {
+async function fetchCreators(options = {}) {
   if (!isSupabaseConfigured) {
     return [];
   }
@@ -764,7 +764,10 @@ async function fetchCreators() {
     .order("sorsa_score", { ascending: false });
 
   if (error) {
-    showToast("Creator data could not load from Supabase yet.");
+    console.warn("Creator roster load failed", error);
+    if (!options.silent) {
+      showToast(getFriendlyErrorMessage(error, "Creator roster is still loading. Please try again shortly."));
+    }
     return creators;
   }
 
@@ -787,7 +790,8 @@ async function fetchCreatorByHandle(handle) {
     .limit(1);
 
   if (error) {
-    showToast("Creator profile could not load.");
+    console.warn("Creator profile load failed", error);
+    showToast(getFriendlyErrorMessage(error, "Creator profile could not load."));
     return null;
   }
 
@@ -810,7 +814,8 @@ async function saveCreatorProfile(creator, userId = creator.id) {
     .single();
 
   if (error) {
-    throw error;
+    console.warn("Creator profile save failed", error);
+    throw new Error(getFriendlyErrorMessage(error, "Creator profile could not be saved right now. Please try again."));
   }
 
   const savedCreator = toAppCreator(data);
@@ -962,7 +967,8 @@ async function fetchCreatorCampaigns(creatorId, options = {}) {
 
   if (error) {
     if (!options.silent) {
-      showToast("Incoming requests could not load.");
+      console.warn("Incoming requests load failed", error);
+      showToast(getFriendlyErrorMessage(error, "Incoming requests could not load."));
     }
     return apiCampaigns;
   }
@@ -1463,6 +1469,19 @@ function showToast(message) {
   }, 3200);
 }
 
+function getFriendlyErrorMessage(error, fallback = "Something went wrong. Please try again.") {
+  const message = String(error?.message || error?.error_description || error || "").trim();
+  if (!message) {
+    return fallback;
+  }
+
+  if (/supabase|row level security|rls|policy|infinite recursion|permission denied/i.test(message)) {
+    return fallback;
+  }
+
+  return message;
+}
+
 function renderStats() {
   const creatorCount = document.querySelector("#creatorCount");
   const requestCount = document.querySelector("#requestCount");
@@ -1515,11 +1534,7 @@ async function initAuthAwareNav() {
     return;
   }
 
-  const dashboardUrl = currentUserRole === "creator"
-    ? "creator-dashboard.html"
-    : currentUserRole === "brand"
-      ? "project-dashboard.html"
-      : "signup.html";
+  const dashboardUrl = getDashboardUrlForSession() || "signup.html";
 
   navLinks.insertAdjacentHTML("beforeend", `
     <a data-auth-link href="${dashboardUrl}">Dashboard</a>
@@ -1533,6 +1548,36 @@ async function initAuthAwareNav() {
     currentUserRole = "";
     window.location.href = "index.html";
   });
+}
+
+function getDashboardUrlForSession() {
+  if (!currentSession?.user) {
+    return "";
+  }
+
+  if (currentUserRole === "creator") {
+    return "creator-dashboard.html";
+  }
+
+  if (currentUserRole === "brand") {
+    return "project-dashboard.html";
+  }
+
+  if (isXAuthSession(currentSession)) {
+    return "creator-onboarding.html";
+  }
+
+  return "";
+}
+
+function redirectExistingSessionFromAuthPage() {
+  const dashboardUrl = getDashboardUrlForSession();
+  if (!dashboardUrl) {
+    return false;
+  }
+
+  window.location.replace(dashboardUrl);
+  return true;
 }
 
 function initHomePage() {
@@ -1828,12 +1873,13 @@ async function initCreatorDashboard() {
             <option value="Premium only">Premium only</option>
           </select>
         </label>
-        <label class="toggle-row">
+        <label class="toggle-row dashboard-visibility-row" for="dashboardVisibility">
           <span>
-            <strong>Visible to projects</strong>
-            <small>Let brands find this creator profile in project search.</small>
+            <strong>Profile visibility</strong>
+            <small id="dashboardVisibilityState">${activeCreator.isPublicProfile ? "Visible to projects" : "Hidden from project search"}</small>
+            <small>Turn this on when you want brands to find you in the creator roster.</small>
           </span>
-          <input type="checkbox" id="dashboardVisibility">
+          <input type="checkbox" id="dashboardVisibility" role="switch" aria-describedby="dashboardVisibilityState">
         </label>
       </section>
 
@@ -1944,6 +1990,7 @@ async function initCreatorDashboard() {
 
     const availabilitySelect = document.querySelector("#dashboardAvailability");
     const visibilityInput = document.querySelector("#dashboardVisibility");
+    const visibilityState = document.querySelector("#dashboardVisibilityState");
     const regionSelect = document.querySelector("#dashboardRegion");
     const skillSelect = document.querySelector("#dashboardSkill");
     const sorsaInput = document.querySelector("#dashboardSorsaScore");
@@ -1953,6 +2000,7 @@ async function initCreatorDashboard() {
 
     availabilitySelect.value = activeCreator.availability || "Available this week";
     visibilityInput.checked = Boolean(activeCreator.isPublicProfile);
+    visibilityState.textContent = visibilityInput.checked ? "Visible to projects" : "Hidden from project search";
     renderRegionSelect(regionSelect);
     regionSelect.value = activeCreator.region || "Global";
     skillSelect.value = activeCreator.skillType || "Writing";
@@ -1990,9 +2038,11 @@ async function initCreatorDashboard() {
           ...activeCreator,
           isPublicProfile: visibilityInput.checked
         }, currentSession.user.id);
+        visibilityState.textContent = visibilityInput.checked ? "Visible to projects" : "Hidden from project search";
         showToast(visibilityInput.checked ? "Profile is visible to projects." : "Profile hidden from project search.");
       } catch (error) {
         visibilityInput.checked = !visibilityInput.checked;
+        visibilityState.textContent = visibilityInput.checked ? "Visible to projects" : "Hidden from project search";
         showToast(error.message || "Profile visibility could not be saved.");
       }
     });
@@ -3066,12 +3116,16 @@ function initSignupPage() {
     return;
   }
 
+  if (redirectExistingSessionFromAuthPage()) {
+    return;
+  }
+
   const creatorSignupButton = document.querySelector("#creatorSignupX");
   const brandSignupForm = document.querySelector("#brandSignupForm");
 
   creatorSignupButton?.addEventListener("click", async () => {
     if (!isSupabaseConfigured) {
-      showToast("Add your Supabase URL and anon key before using X login.");
+      showToast("X login is not configured yet.");
       return;
     }
 
@@ -3086,7 +3140,7 @@ function initSignupPage() {
     event.preventDefault();
 
     if (!isSupabaseConfigured) {
-      showToast("Add your Supabase URL and anon key before creating accounts.");
+      showToast("Account creation is not configured yet.");
       return;
     }
 
@@ -3130,6 +3184,10 @@ function initLoginPage() {
     return;
   }
 
+  if (redirectExistingSessionFromAuthPage()) {
+    return;
+  }
+
   const creatorTab = document.querySelector("#creatorLoginTab");
   const brandTab = document.querySelector("#brandLoginTab");
   const creatorPanel = document.querySelector("#creatorLoginPanel");
@@ -3152,7 +3210,7 @@ function initLoginPage() {
 
   creatorLoginButton?.addEventListener("click", async () => {
     if (!isSupabaseConfigured) {
-      showToast("Add your Supabase URL and anon key before using X login.");
+      showToast("X login is not configured yet.");
       return;
     }
 
@@ -3167,7 +3225,7 @@ function initLoginPage() {
     event.preventDefault();
 
     if (!isSupabaseConfigured) {
-      showToast("Add your Supabase URL and anon key before logging in.");
+      showToast("Login is not configured yet.");
       return;
     }
 
@@ -3224,6 +3282,10 @@ async function initCreatorOnboardingPage() {
   if (existingCreator) {
     window.location.href = "creator-dashboard.html";
     return;
+  }
+
+  if (xPreview) {
+    xPreview.innerHTML = '<div class="x-intel-card"><p>Collecting your X profile details...</p></div>';
   }
 
   const xData = await getXDataFromSession(currentSession, { forceRefresh: true });
@@ -3457,7 +3519,7 @@ async function bootApp() {
     return;
   }
 
-  creators = await fetchCreators();
+  creators = await fetchCreators({ silent: true });
   requests = currentSession?.user && currentUserRole === "brand"
     ? await fetchBrandCampaigns(currentSession.user.id)
     : [];
