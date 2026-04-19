@@ -978,6 +978,17 @@ legend span {
   accent-color: var(--black);
 }
 
+.dashboard-visibility-row {
+  border-width: 2px;
+  border-color: rgba(17, 17, 17, 0.28);
+  background: linear-gradient(135deg, #ffffff, #fff4d8);
+}
+
+.dashboard-visibility-row input {
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
 .range-field,
 .x-profile-box,
 .shortlist-box,
