@@ -37,7 +37,7 @@
       <div class="section-heading">
         <p class="eyebrow">Creator details</p>
         <h2>One profile, owned by you.</h2>
-        <p>Choose up to two content categories. Your Sorsa score updates automatically when you save.</p>
+        <p>Choose up to two content categories and set the Sorsa score brands will use while shortlisting.</p>
         <div id="onboardingXPreview"></div>
       </div>
       <form id="creatorOnboardingForm" class="panel stacked-form">
@@ -55,6 +55,10 @@
           Pay range per post
           <input type="range" id="onboardingRateRange" min="0" max="23" step="1" value="0">
           <span class="range-value" id="onboardingRateLabel">$10 - $50</span>
+        </label>
+        <label>
+          Sorsa score
+          <input type="number" id="onboardingSorsaScore" min="0" max="100" step="1" value="50" required>
         </label>
         <div class="form-row">
           <label>
