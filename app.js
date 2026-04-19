@@ -385,7 +385,7 @@ async function fetchXDataFromProviderToken(session) {
   return null;
 }
 
-async function getXDataFromSession(session) {
+async function getXDataFromSession(session, options = {}) {
   const metadataXData = extractXDataFromUser(session?.user);
   const tokenXData = await fetchXDataFromProviderToken(session);
   const mergedXData = tokenXData
@@ -396,17 +396,17 @@ async function getXDataFromSession(session) {
     return mergedXData;
   }
 
-  return enrichXDataByHandle(mergedXData.handle, mergedXData);
+  return enrichXDataByHandle(mergedXData.handle, mergedXData, options);
 }
 
-async function enrichXDataByHandle(handle, fallbackXData = {}) {
+async function enrichXDataByHandle(handle, fallbackXData = {}, options = {}) {
   const normalizedHandle = normalizeHandleForStore(handle || fallbackXData.handle);
   if (!normalizedHandle) {
     return fallbackXData;
   }
 
   try {
-    const backendXData = await requestXProfileEnrichment(normalizedHandle);
+    const backendXData = await requestXProfileEnrichment(normalizedHandle, options);
     if (!hasLiveXProfile(backendXData)) {
       return backendXData?.note ? { ...fallbackXData, handle: normalizedHandle, note: backendXData.note } : { ...fallbackXData, handle: normalizedHandle };
     }
@@ -610,6 +610,7 @@ function toAppCreator(row) {
     videoStyles: Array.isArray(row.video_styles) ? row.video_styles : [],
     contact: row.contact || "",
     bio: row.bio || "",
+    isPublicProfile: Boolean(row.is_public_profile),
     verifiedCampaign: Boolean(row.verified_campaign),
     portfolio: Array.isArray(row.portfolio) ? row.portfolio : [],
     xProfile: {
@@ -656,6 +657,7 @@ function toDbCreator(creator, userId = creator.id) {
     availability: creator.availability || "Available this week",
     contact: creator.contact || "",
     example: creator.example || "",
+    is_public_profile: Boolean(creator.isPublicProfile || creator.is_public_profile),
     verified_campaign: Boolean(creator.verifiedCampaign || creator.verified_campaign),
     portfolio
   };
@@ -746,6 +748,7 @@ async function fetchCreators() {
   const { data, error } = await supabase
     .from("creators")
     .select("*")
+    .eq("is_public_profile", true)
     .order("sorsa_score", { ascending: false });
 
   if (error) {
@@ -767,6 +770,7 @@ async function fetchCreatorByHandle(handle) {
     .from("creators")
     .select("*")
     .eq("handle", normalizedHandle)
+    .eq("is_public_profile", true)
     .maybeSingle();
 
   if (error) {
@@ -801,6 +805,46 @@ async function saveCreatorProfile(creator, userId = creator.id) {
   return savedCreator;
 }
 
+async function saveCreatorXDraftFromSession(xData, userId) {
+  const handle = normalizeHandleForStore(xData?.handle);
+  if (!handle || !userId) {
+    return null;
+  }
+
+  const [minRate, maxRate] = rateRanges[0];
+  return saveCreatorProfile({
+    id: userId,
+    name: xData.name || normalizeHandleForDisplay(handle) || "Creator",
+    handle: normalizeHandleForDisplay(handle),
+    minRate,
+    maxRate,
+    region: "Global",
+    availability: "Available this week",
+    example: "",
+    categories: [],
+    skillType: "Writing",
+    videoStyles: [],
+    contact: "",
+    bio: xData.bio || "",
+    portfolio: [],
+    isPublicProfile: false,
+    xProfile: {
+      handle,
+      avatarUrl: xData.avatarUrl || "",
+      bio: xData.bio || "",
+      followers: Number(xData.followers || 0),
+      following: Number(xData.following || 0),
+      tweetCount: Number(xData.tweetCount || 0),
+      location: xData.location || "",
+      verified: Boolean(xData.verified),
+      collectedAt: xData.collectedAt || new Date().toISOString(),
+      notableFollowers: xData.notableFollowers || "",
+      pinnedTweet: xData.pinnedTweet || "",
+      collected: true
+    }
+  }, userId);
+}
+
 async function refreshCreatorXData(creator) {
   if (!isSupabaseConfigured) {
     return creator;
@@ -819,7 +863,7 @@ async function refreshCreatorXData(creator) {
   currentSession = refreshedSession;
   const sessionXData = await getXDataFromSession(refreshedSession);
   const fallbackHandle = normalizeHandleForStore(sessionXData.handle || creator.xProfile?.handle || creator.handle);
-  const xData = await enrichXDataByHandle(fallbackHandle, sessionXData);
+  const xData = await enrichXDataByHandle(fallbackHandle, sessionXData, { forceRefresh: true });
   const updatedCreator = mergeCreatorWithXData(creator, xData);
   return saveCreatorProfile(updatedCreator, refreshedSession.user.id);
 }
@@ -1260,8 +1304,13 @@ function parseXHandle(profileUrl) {
   return "";
 }
 
-async function requestXProfileEnrichment(handle) {
-  const response = await fetch(getApiUrl(`/api/x-profile?handle=${encodeURIComponent(handle)}`));
+async function requestXProfileEnrichment(handle, options = {}) {
+  const params = new URLSearchParams({ handle });
+  if (options.forceRefresh) {
+    params.set("refresh", "1");
+  }
+
+  const response = await fetch(getApiUrl(`/api/x-profile?${params.toString()}`));
   if (!response.ok) {
     throw new Error("X enrichment endpoint is not available yet.");
   }
@@ -1766,6 +1815,13 @@ async function initCreatorDashboard() {
             <option value="Premium only">Premium only</option>
           </select>
         </label>
+        <label class="toggle-row">
+          <span>
+            <strong>Visible to projects</strong>
+            <small>Let brands find this creator profile in project search.</small>
+          </span>
+          <input type="checkbox" id="dashboardVisibility">
+        </label>
       </section>
 
       <form class="panel stacked-form dashboard-edit" id="creatorDashboardEdit">
@@ -1870,6 +1926,7 @@ async function initCreatorDashboard() {
     `;
 
     const availabilitySelect = document.querySelector("#dashboardAvailability");
+    const visibilityInput = document.querySelector("#dashboardVisibility");
     const regionSelect = document.querySelector("#dashboardRegion");
     const skillSelect = document.querySelector("#dashboardSkill");
     const videoOptions = document.querySelector("#dashboardVideoOptions");
@@ -1877,6 +1934,7 @@ async function initCreatorDashboard() {
     const rateLabel = document.querySelector("#dashboardRateLabel");
 
     availabilitySelect.value = activeCreator.availability || "Available this week";
+    visibilityInput.checked = Boolean(activeCreator.isPublicProfile);
     renderRegionSelect(regionSelect);
     regionSelect.value = activeCreator.region || "Global";
     skillSelect.value = activeCreator.skillType || "Writing";
@@ -1905,6 +1963,19 @@ async function initCreatorDashboard() {
         availability: availabilitySelect.value
       }, currentSession.user.id);
       showToast("Availability saved.");
+    });
+
+    visibilityInput.addEventListener("change", async () => {
+      try {
+        activeCreator = await saveCreatorProfile({
+          ...activeCreator,
+          isPublicProfile: visibilityInput.checked
+        }, currentSession.user.id);
+        showToast(visibilityInput.checked ? "Profile is visible to projects." : "Profile hidden from project search.");
+      } catch (error) {
+        visibilityInput.checked = !visibilityInput.checked;
+        showToast(error.message || "Profile visibility could not be saved.");
+      }
     });
 
     rateRange.addEventListener("input", () => setRangeLabel(rateRange, rateLabel));
@@ -3113,13 +3184,31 @@ async function initCreatorOnboardingPage() {
     return;
   }
 
-  const existingCreator = creators.find((item) => item.id === currentSession.user.id);
+  let existingCreator = creators.find((item) => item.id === currentSession.user.id);
+  if (!existingCreator && isSupabaseConfigured) {
+    const { data } = await supabase
+      .from("creators")
+      .select("*")
+      .eq("id", currentSession.user.id)
+      .maybeSingle();
+    existingCreator = toAppCreator(data);
+  }
+
   if (existingCreator) {
     window.location.href = "creator-dashboard.html";
     return;
   }
 
-  const xData = await getXDataFromSession(currentSession);
+  const xData = await getXDataFromSession(currentSession, { forceRefresh: true });
+  if (xData.handle) {
+    try {
+      await saveCreatorXDraftFromSession(xData, currentSession.user.id);
+      currentUserRole = "creator";
+    } catch (error) {
+      console.warn("Creator X draft could not be saved.", error);
+    }
+  }
+
   document.querySelector("#onboardingName").value = xData.name || "";
   document.querySelector("#onboardingHandle").value = normalizeHandleForDisplay(xData.handle);
   document.querySelector("#onboardingBio").value = xData.bio || "";
@@ -3172,7 +3261,7 @@ async function initCreatorOnboardingPage() {
 
     try {
       const formHandle = normalizeHandleForStore(handle) || xData.handle;
-      const savedXData = await enrichXDataByHandle(formHandle, xData);
+      const savedXData = await enrichXDataByHandle(formHandle, xData, { forceRefresh: true });
       await saveCreatorProfile({
         id: currentSession.user.id,
         name: document.querySelector("#onboardingName").value.trim() || savedXData.name || "",
@@ -3188,6 +3277,7 @@ async function initCreatorOnboardingPage() {
         contact: document.querySelector("#onboardingContact").value.trim(),
         bio: document.querySelector("#onboardingBio").value.trim(),
         portfolio: [],
+        isPublicProfile: false,
         xProfile: {
           handle: formHandle || savedXData.handle,
           avatarUrl: savedXData.avatarUrl,
