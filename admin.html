@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Requests | Crypto Creator Desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="Crypto Creator Desk home">
+      <span class="brand-mark">CD</span>
+      <span>
+        <strong>Creator Desk</strong>
+        <small>Crypto agency marketplace</small>
+      </span>
+    </a>
+    <nav class="nav-links" aria-label="Primary navigation">
+      <a href="index.html">Home</a>
+      <a href="projects.html">Projects</a>
+      <!--  <!-- <a href="signup.html">Join as Creator</a> --> -->
+    </nav>
+    <button class="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">Menu</button>
+  </header>
+
+  <main>
+    <section class="page-hero section-shell">
+      <p class="eyebrow">Agency admin</p>
+      <h1>Incoming creator requests.</h1>
+      <p class="hero-text">Review project requests, selected creators, rate ranges, Sorsa scores, and contact details so you can coordinate offers manually.</p>
+    </section>
+
+    <section class="section-shell admin-section" id="adminLoginSection">
+      <form class="panel stacked-form admin-login" id="adminLoginForm">
+        <div class="section-heading">
+          <p class="eyebrow">Admin login</p>
+          <h2>Protect the request inbox.</h2>
+          <p>This front-end demo uses a local passcode. The optional Node backend scaffold adds a server-side route for production-style storage.</p>
+        </div>
+        <label>
+          Admin passcode
+          <input type="password" id="adminPasscode" placeholder="Enter admin passcode" required>
+        </label>
+        <button class="button primary" type="submit">Unlock admin</button>
+      </form>
+    </section>
+
+    <section class="section-shell admin-section is-hidden" id="adminWorkspace">
+      <div class="results-toolbar">
+        <div>
+          <p class="eyebrow">Request inbox</p>
+          <h2>Submitted campaigns</h2>
+          <p>Every one-click project request appears here, ready for you to contact the selected creators.</p>
+        </div>
+        <button class="button subtle" id="clearRequests" type="button">Clear demo requests</button>
+      </div>
+      <div class="admin-list" id="adminList"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div>
+      <a class="brand" href="index.html" aria-label="Crypto Creator Desk home">
+        <span class="brand-mark">CD</span>
+        <span>
+          <strong>Creator Desk</strong>
+          <small>Crypto agency marketplace</small>
+        </span>
+      </a>
+      <p>Creator sourcing, campaign request routing, and agency-led outreach for Web3 teams.</p>
+    </div>
+    <nav aria-label="Footer navigation">
+      <a href="projects.html">Projects</a>
+       <!-- <a href="signup.html">Join as Creator</a> -->
+    </nav>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

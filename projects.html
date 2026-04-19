@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Find Creators | Crypto Creator Desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="project-page">
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="Crypto Creator Desk home">
+      <span class="brand-mark">CD</span>
+      <span>
+        <strong>Creator Desk</strong>
+        <small>Crypto agency marketplace</small>
+      </span>
+    </a>
+    <nav class="nav-links" aria-label="Primary navigation">
+      <a href="index.html">Home</a>
+      <a class="active" href="projects.html">Projects</a>
+       <!-- <a href="signup.html">Join as Creator</a> -->
+    </nav>
+    <a class="header-cta" href="#projectForm">Start request</a>
+    <button class="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">Menu</button>
+  </header>
+
+  <main>
+    <section class="page-hero project-hero section-shell">
+      <div class="project-hero-copy">
+        <p class="eyebrow">Project booking</p>
+        <h1>Build a creator shortlist that can move the market.</h1>
+        <p class="hero-text">Enter the campaign details, filter the creator roster, select everyone you want, then submit the request to the agency in one click. We help you shortlist by useful reach, not just follower count.</p>
+        <div class="project-hero-actions">
+          <a class="button primary" href="#projectForm">Start request</a>
+          <a class="button ghost" href="project-dashboard.html">Track campaign</a>
+        </div>
+      </div>
+      <div class="project-hero-media" aria-label="Campaign planning snapshots">
+        <img class="project-hero-main" src="https://images.unsplash.com/photo-1559136555-9303baea8ebd?auto=format&fit=crop&w=1100&q=80" alt="Team planning a campaign around a laptop">
+        <img class="project-hero-float project-hero-float-one" src="https://images.unsplash.com/photo-1640340434855-6084b1f4901c?auto=format&fit=crop&w=700&q=80" alt="Market data on a trading screen">
+        <div class="project-hero-note">
+          <span>24h routing</span>
+          <strong>brief, creator fit, urgency, and reach quality in one request</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-shell page-context-grid">
+      <article>
+        <p class="eyebrow">Reach over followers</p>
+        <h2>Do not buy numbers. Buy attention that can move.</h2>
+        <p>The best creator for a campaign is not always the largest account. We help you look at audience relevance, content clarity, trust, region, category fit, and whether the creator can deliver the format your project needs.</p>
+      </article>
+      <article>
+        <p class="eyebrow">Agency audit layer</p>
+        <h2>We sanity-check your shortlist before outreach.</h2>
+        <p>After you select creators, the agency can review pricing, urgency, category match, X context, availability, and content scope before contacting the creators with the offer.</p>
+      </article>
+    </section>
+
+    <section class="section-shell marketplace-grid">
+      <div class="panel finder-panel" id="campaignBriefPanel">
+        <div class="section-heading">
+          <p class="eyebrow">Campaign brief</p>
+          <h2>Search by fit.</h2>
+          <p>Creators appear when they match your category and sit within your budget range.</p>
+        </div>
+
+        <button class="brief-toggle" id="projectBriefToggle" type="button" aria-expanded="true" aria-controls="projectBriefBody">
+          Campaign brief
+          <span>Open</span>
+        </button>
+
+        <div class="project-brief-body" id="projectBriefBody">
+          <form id="projectForm" class="stacked-form">
+            <label>
+              Project name
+              <input type="text" id="projectName" placeholder="e.g. NovaDEX launch" required>
+            </label>
+            <label>
+              Contact email or Telegram
+              <input type="text" id="projectContact" placeholder="e.g. @founder or team@email.com" required>
+            </label>
+            <div class="form-row">
+              <label>
+                Category needed
+                <select id="categoryFilter">
+                  <option value="All">All categories</option>
+                </select>
+              </label>
+              <label>
+                Campaign region
+                <select id="projectRegion" required>
+                  <option value="Global">Global / all regions</option>
+                </select>
+              </label>
+            </div>
+            <div class="range-field budget-field">
+              <label class="field-label" for="budgetFilter">Budget range per post</label>
+              <input type="range" id="budgetFilter" min="0" max="23" step="1" value="0">
+              <div class="budget-input-grid">
+                <label>
+                  Min budget
+                  <input type="number" id="budgetMin" min="0" step="10" value="10" inputmode="numeric">
+                </label>
+                <label>
+                  Max budget
+                  <input type="number" id="budgetMax" min="0" step="10" value="50" inputmode="numeric">
+                </label>
+              </div>
+              <span class="range-value" id="budgetLabel">$10 - $50</span>
+              <small>Use the slider for quick presets, or type an exact range.</small>
+            </div>
+            <div class="form-row">
+              <label>
+                Content skill needed
+                <select id="projectSkill" required>
+                  <option value="">Select skill</option>
+                  <option value="Writing">Writing content only</option>
+                  <option value="Video">Video content only</option>
+                  <option value="Both">Both writing and video</option>
+                </select>
+              </label>
+              <label>
+                Urgency
+                <select id="projectUrgency" required>
+                  <option value="">How fast should it go live?</option>
+                  <option value="Within 24 hours">Within 24 hours</option>
+                  <option value="Within 48 hours">Within 48 hours</option>
+                  <option value="3-5 days">3-5 days</option>
+                  <option value="Within 1 week">Within 1 week</option>
+                  <option value="Flexible timeline">Flexible timeline</option>
+                </select>
+              </label>
+            </div>
+            <fieldset class="video-options is-hidden" id="projectVideoOptions">
+              <legend>Video content type <span>Choose all you need</span></legend>
+              <div class="category-options compact-options">
+                <label class="category-pill">
+                  <input type="checkbox" name="projectVideoStyle" value="Motion Graphics">
+                  Motion graphics
+                </label>
+                <label class="category-pill">
+                  <input type="checkbox" name="projectVideoStyle" value="Storytelling">
+                  Storytelling
+                </label>
+                <label class="category-pill">
+                  <input type="checkbox" name="projectVideoStyle" value="Talking Head">
+                  Talking head videos
+                </label>
+              </div>
+            </fieldset>
+            <label>
+              Campaign notes
+              <textarea id="projectNotes" rows="4" placeholder="Token launch, app review, thread, video mention, region, timeline..."></textarea>
+            </label>
+            <label>
+              Draft or content scope
+              <textarea id="contentScope" rows="4" placeholder="Optional: paste draft copy, talking points, deliverables, hashtags, links, disclaimers, or content direction..."></textarea>
+            </label>
+            <label class="file-field">
+              Upload draft file
+              <input type="file" id="projectDraftFile" accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp,.mp4,.mov">
+              <span>Optional. Uploaded files are stored in Supabase Storage with the campaign request.</span>
+            </label>
+          </form>
+
+          <div class="shortlist-box" id="shortlistBox">
+            <div>
+              <strong>Selected creators</strong>
+              <span id="selectedSummary">No creators selected yet.</span>
+            </div>
+            <div class="button-row">
+              <input type="text" id="shortlistName" placeholder="Shortlist name">
+              <button class="button ghost" id="saveShortlist" type="button">Save shortlist</button>
+              <button class="button primary" id="submitRequest" type="button">Submit request</button>
+            </div>
+          </div>
+          <div class="tracking-code-panel is-hidden" id="trackingCodePanel" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <div class="creator-results" id="creatorResults">
+        <div class="results-toolbar">
+          <div>
+            <p class="eyebrow">Available roster</p>
+            <h2 id="resultTitle">Creator matches</h2>
+          </div>
+          <div class="toolbar-actions">
+            <label class="mini-filter creator-search-filter">
+              Search creator
+              <input type="search" id="creatorSearch" placeholder="@username or name" autocomplete="off">
+            </label>
+            <label class="mini-filter">
+              Sort
+              <select id="sortCreators">
+                <option value="recommended">Recommended</option>
+                <option value="score">Highest Sorsa</option>
+                <option value="price-low">Lowest price</option>
+                <option value="followers">Highest reach</option>
+              </select>
+            </label>
+            <label class="mini-filter">
+              Min score
+              <input type="number" id="minSorsaFilter" min="0" max="100" step="1" placeholder="0">
+            </label>
+            <label class="mini-filter">
+              Availability
+              <select id="availabilityFilter">
+                <option value="All">All</option>
+                <option value="Available now">Available now</option>
+                <option value="Available this week">Available this week</option>
+                <option value="Premium only">Premium only</option>
+              </select>
+            </label>
+            <button class="button subtle" id="clearSelection" type="button">Clear shortlist</button>
+          </div>
+        </div>
+        <div class="comparison-panel is-hidden" id="comparisonPanel"></div>
+        <div class="creator-list" id="creatorList" aria-live="polite"></div>
+      </div>
+    </section>
+    <nav class="project-mobile-dock" aria-label="Project shortcut controls">
+      <button type="button" id="mobileBriefButton">Brief</button>
+      <a href="#creatorResults">Creators</a>
+      <button type="button" id="mobileShortlistButton"><span id="mobileSelectedCount">0 selected</span></button>
+      <button type="button" id="mobileSubmitButton">Submit</button>
+    </nav>
+    <section class="section-shell dashboard-followup">
+      <div class="section-heading">
+        <p class="eyebrow">Already submitted?</p>
+        <h2>Track your project request.</h2>
+        <p>Use the same contact you submitted with and the tracking code generated after saving or submitting.</p>
+      </div>
+      <a class="button primary" href="project-dashboard.html">Open project dashboard</a>
+      <div class="dashboard-output" id="projectDashboardOutput"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div>
+      <a class="brand" href="index.html" aria-label="Crypto Creator Desk home">
+        <span class="brand-mark">CD</span>
+        <span>
+          <strong>Creator Desk</strong>
+          <small>Crypto agency marketplace</small>
+        </span>
+      </a>
+      <p>Creator sourcing, campaign request routing, and agency-led outreach for Web3 teams.</p>
+    </div>
+    <nav aria-label="Footer navigation">
+      <a href="projects.html">Projects</a>
+       <!-- <a href="signup.html">Join as Creator</a> -->
+    </nav>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

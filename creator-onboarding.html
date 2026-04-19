@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Creator Onboarding | Crypto Creator Desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="Crypto Creator Desk home">
+      <span class="brand-mark">CD</span>
+      <span>
+        <strong>Creator Desk</strong>
+        <small>Crypto agency marketplace</small>
+      </span>
+    </a>
+    <nav class="nav-links" aria-label="Primary navigation">
+      <a href="index.html">Home</a>
+      <a href="projects.html">Projects</a>
+       <!-- <a href="signup.html">Join as Creator</a> -->
+    </nav>
+    <button class="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">Menu</button>
+  </header>
+
+  <main>
+    <section class="page-hero section-shell">
+      <p class="eyebrow">Creator onboarding</p>
+      <h1>Finish your creator profile.</h1>
+      <p class="hero-text">Your X identity starts the profile. Add the campaign details brands need before shortlisting you.</p>
+    </section>
+
+    <section class="section-shell split-section">
+      <div class="section-heading">
+        <p class="eyebrow">Creator details</p>
+        <h2>One profile, owned by you.</h2>
+        <p>Choose up to two content categories. Your Sorsa score updates automatically when you save.</p>
+        <div id="onboardingXPreview"></div>
+      </div>
+      <form id="creatorOnboardingForm" class="panel stacked-form">
+        <div class="form-row">
+          <label>
+            Creator name
+            <input type="text" id="onboardingName" required>
+          </label>
+          <label>
+            Handle
+            <input type="text" id="onboardingHandle" required>
+          </label>
+        </div>
+        <label class="range-field">
+          Pay range per post
+          <input type="range" id="onboardingRateRange" min="0" max="23" step="1" value="0">
+          <span class="range-value" id="onboardingRateLabel">$10 - $50</span>
+        </label>
+        <div class="form-row">
+          <label>
+            Primary contact
+            <input type="text" id="onboardingContact" placeholder="Telegram, email, WhatsApp..." required>
+          </label>
+          <label>
+            Creator region
+            <select id="onboardingRegion" required>
+              <option value="">Select region</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-row">
+          <label>
+            Availability
+            <select id="onboardingAvailability" required>
+              <option value="">Select availability</option>
+              <option value="Available now">Available now</option>
+              <option value="Available this week">Available this week</option>
+              <option value="Booked">Booked</option>
+              <option value="Premium only">Premium only</option>
+            </select>
+          </label>
+          <label>
+            Best campaign example
+            <input type="text" id="onboardingExample" placeholder="e.g. DEX launch thread, NFT video review...">
+          </label>
+        </div>
+        <label>
+          Content skill
+          <select id="onboardingSkill" required>
+            <option value="">Select skill</option>
+            <option value="Writing">Writing content only</option>
+            <option value="Video">Video content only</option>
+            <option value="Both">Both writing and video</option>
+          </select>
+        </label>
+        <fieldset class="video-options is-hidden" id="onboardingVideoOptions">
+          <legend>Video content type <span>Choose all you can provide</span></legend>
+          <div class="category-options compact-options">
+            <label class="category-pill">
+              <input type="checkbox" name="creatorVideoStyle" value="Motion Graphics">
+              Motion graphics
+            </label>
+            <label class="category-pill">
+              <input type="checkbox" name="creatorVideoStyle" value="Storytelling">
+              Storytelling
+            </label>
+            <label class="category-pill">
+              <input type="checkbox" name="creatorVideoStyle" value="Talking Head">
+              Talking head videos
+            </label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Content categories <span>Choose maximum two</span></legend>
+          <div class="category-options" id="onboardingCategoryOptions"></div>
+        </fieldset>
+        <label>
+          Creator notes
+          <textarea id="onboardingBio" rows="4" placeholder="Audience, region, best formats, previous Web3 work..."></textarea>
+        </label>
+        <button class="button primary wide" type="submit">Save creator profile</button>
+      </form>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div>
+      <a class="brand" href="index.html" aria-label="Crypto Creator Desk home">
+        <span class="brand-mark">CD</span>
+        <span>
+          <strong>Creator Desk</strong>
+          <small>Crypto agency marketplace</small>
+        </span>
+      </a>
+      <p>Creator sourcing, campaign request routing, and agency-led outreach for Web3 teams.</p>
+    </div>
+    <nav aria-label="Footer navigation">
+      <a href="projects.html">Projects</a>
+       <!-- <a href="signup.html">Join as Creator</a> -->
+    </nav>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

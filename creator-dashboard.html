@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Creator Dashboard | Crypto Creator Desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="creator-dashboard-page">
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="Crypto Creator Desk home">
+      <span class="brand-mark">CD</span>
+      <span>
+        <strong>Creator Desk</strong>
+        <small>Crypto agency marketplace</small>
+      </span>
+    </a>
+    <nav class="nav-links" aria-label="Primary navigation">
+      <a href="index.html">Home</a>
+      <a href="projects.html">Projects</a>
+       <!-- <a href="signup.html">Join as Creator</a> -->
+    </nav>
+    <button class="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">Menu</button>
+  </header>
+
+  <main>
+    <section class="page-hero section-shell">
+      <p class="eyebrow">Creator dashboard</p>
+      <h1>Manage your creator profile.</h1>
+      <p class="hero-text">Review how projects see you, update your profile, manage proof, and see incoming shortlisted campaign requests.</p>
+    </section>
+    <section class="section-shell dashboard-grid">
+      <div class="dashboard-output" id="creatorDashboardOutput"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div>
+      <a class="brand" href="index.html" aria-label="Crypto Creator Desk home">
+        <span class="brand-mark">CD</span>
+        <span>
+          <strong>Creator Desk</strong>
+          <small>Crypto agency marketplace</small>
+        </span>
+      </a>
+      <p>Creator sourcing, campaign request routing, and agency-led outreach for Web3 teams.</p>
+    </div>
+    <nav aria-label="Footer navigation">
+      <a href="projects.html">Projects</a>
+       <!-- <a href="signup.html">Join as Creator</a> -->
+    </nav>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
