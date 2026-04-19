@@ -1050,7 +1050,12 @@ legend span {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.75rem;
+}
+
+.x-intel-heading [data-refresh-x-data] {
+  flex-shrink: 0;
 }
 
 .x-intel-heading strong,
@@ -1158,7 +1163,8 @@ legend span {
 }
 
 .dashboard-mobile-refresh {
-  display: none;
+  display: inline-flex;
+  width: fit-content;
 }
 
 .creator-list {
