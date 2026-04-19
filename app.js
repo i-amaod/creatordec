@@ -53,6 +53,9 @@ const regions = [
   "Oceania"
 ];
 
+const SORSA_SCORE_LIMIT = 6000;
+const DEFAULT_SORSA_SCORE = 3000;
+
 function normalizeCreator(creator) {
   return {
     ...creator,
@@ -223,6 +226,19 @@ function contactMatchesStoredAccess(contact, storedAccess) {
 
 function getRedirectUrl(page) {
   return `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, page)}`;
+}
+
+function getProjectDashboardUrl(contact = "", trackingCode = "") {
+  const normalizedCode = normalizeTrackingCode(trackingCode);
+  if (!contact || !normalizedCode) {
+    return "project-dashboard.html";
+  }
+
+  const params = new URLSearchParams({
+    contact,
+    code: normalizedCode
+  });
+  return `project-dashboard.html?${params.toString()}`;
 }
 
 function hasAuthCallbackParams() {
@@ -574,28 +590,72 @@ function formatDateTime(value) {
   });
 }
 
-function calculateSorsaScore(creator) {
-  let score = 50;
-  if (creator.x_followers >= 100000) score += 20;
-  else if (creator.x_followers >= 50000) score += 15;
-  else if (creator.x_followers >= 10000) score += 10;
-  else if (creator.x_followers >= 1000) score += 5;
-  if (creator.bio && creator.bio.length > 50) score += 5;
-  if (creator.example) score += 5;
-  if (creator.portfolio && creator.portfolio.length > 0) score += 5;
-  if (creator.contact) score += 3;
-  if (creator.x_notable_followers) score += 5;
-  if (creator.verified_campaign) score += 10;
-  return Math.min(score, 99);
+function clampSorsaScore(score) {
+  return Math.max(0, Math.min(SORSA_SCORE_LIMIT, Math.round(score)));
 }
 
-function normalizeSorsaScore(value, fallback = 50) {
+function calculateSorsaScore(creator) {
+  let score = 1200;
+  if (creator.x_followers >= 100000) score += 1300;
+  else if (creator.x_followers >= 50000) score += 1000;
+  else if (creator.x_followers >= 10000) score += 700;
+  else if (creator.x_followers >= 1000) score += 350;
+  if (creator.bio && creator.bio.length > 50) score += 350;
+  if (creator.example) score += 300;
+  if (creator.portfolio && creator.portfolio.length > 0) score += 350;
+  if (creator.contact) score += 250;
+  if (creator.x_notable_followers) score += 350;
+  if (creator.verified_campaign) score += 900;
+  return clampSorsaScore(score);
+}
+
+function normalizeSorsaScore(value, fallback = DEFAULT_SORSA_SCORE) {
   const score = Number(value);
   if (!Number.isFinite(score)) {
-    return fallback;
+    return clampSorsaScore(Number.isFinite(Number(fallback)) ? Number(fallback) : DEFAULT_SORSA_SCORE);
   }
 
-  return Math.max(0, Math.min(100, Math.round(score)));
+  return clampSorsaScore(score);
+}
+
+function getCreatorTrustLevel(score) {
+  const normalizedScore = normalizeSorsaScore(score, 0);
+
+  if (normalizedScore >= 5400) {
+    return { label: "Elite Trust", className: "trust-elite" };
+  }
+
+  if (normalizedScore >= 4500) {
+    return { label: "High Trust", className: "trust-high" };
+  }
+
+  if (normalizedScore >= 3000) {
+    return { label: "Trusted", className: "trust-standard" };
+  }
+
+  if (normalizedScore >= 1500) {
+    return { label: "Building Trust", className: "trust-building" };
+  }
+
+  return { label: "Low Trust", className: "trust-low" };
+}
+
+function renderTrustScoreBadge(creator, options = {}) {
+  const score = normalizeSorsaScore(creator?.sorsaScore ?? creator?.sorsa_score, 0);
+  const trustLevel = getCreatorTrustLevel(score);
+  const tag = options.tag === "div" ? "div" : "span";
+  const className = ["score-badge", "trust-score-badge", trustLevel.className, options.className || ""]
+    .filter(Boolean)
+    .join(" ");
+  const description = `Trust level: ${trustLevel.label}. Sorsa score ${formatCount(score)} out of ${formatCount(SORSA_SCORE_LIMIT)}. Lower scores mean lower trust.`;
+
+  return `
+    <${tag} class="${escapeHtml(className)}" title="${escapeHtml(description)}" aria-label="${escapeHtml(description)}">
+      <span class="trust-icon" aria-hidden="true">TL</span>
+      <strong>${escapeHtml(formatCount(score))}</strong>
+      <small>${escapeHtml(trustLevel.label)}</small>
+    </${tag}>
+  `;
 }
 
 function toAppCreator(row) {
@@ -609,7 +669,7 @@ function toAppCreator(row) {
     handle: normalizeHandleForDisplay(row.handle),
     minRate: Number(row.min_rate || 0),
     maxRate: row.max_rate === null ? Infinity : Number(row.max_rate || 0),
-    sorsaScore: normalizeSorsaScore(row.sorsa_score, 50),
+    sorsaScore: normalizeSorsaScore(row.sorsa_score, DEFAULT_SORSA_SCORE),
     region: row.region || "Global",
     availability: row.availability || "Available this week",
     example: row.example || "",
@@ -1245,7 +1305,7 @@ function getCreatorFollowers(creator) {
 }
 
 function calculateCreatorMatchScore(creator, context = {}) {
-  let score = Number(creator.sorsaScore || 0);
+  let score = Math.round((normalizeSorsaScore(creator.sorsaScore, 0) / SORSA_SCORE_LIMIT) * 70);
 
   if (context.category && context.category !== "All" && creator.categories.includes(context.category)) {
     score += 18;
@@ -1272,13 +1332,14 @@ function calculateCreatorMatchScore(creator, context = {}) {
 
 function getCreatorBadges(creator, matchScore) {
   const badges = [];
+  const trustLevel = getCreatorTrustLevel(creator.sorsaScore);
 
   if (matchScore >= 105) {
     badges.push("Best Match");
   }
 
-  if (Number(creator.sorsaScore || 0) >= 85) {
-    badges.push("High Trust");
+  if (normalizeSorsaScore(creator.sorsaScore, 0) >= 4500) {
+    badges.push(trustLevel.label);
   }
 
   if (creator.availability === "Available now") {
@@ -1413,7 +1474,7 @@ function renderCreatorProfileCard(creator) {
         </p>
       </div>
       <div class="profile-stats">
-        <span><strong>${escapeHtml(creator.sorsaScore)}</strong>Sorsa score</span>
+        <span><strong>${escapeHtml(formatCount(creator.sorsaScore))}</strong>Sorsa trust / ${formatCount(SORSA_SCORE_LIMIT)}</span>
         <span><strong>${getCreatorFollowers(creator).toLocaleString()}</strong>X followers</span>
         <span><strong>${formatStoredRate(creator.minRate, creator.maxRate)}</strong>Rate per post</span>
         <span><strong>${escapeHtml(creator.region || "Global")}</strong>Region</span>
@@ -1861,7 +1922,7 @@ async function initCreatorDashboard() {
         <div class="section-heading">
           <p class="eyebrow">Creator profile</p>
           <h2>${escapeHtml(activeCreator.name)}</h2>
-          <p>${escapeHtml(activeCreator.handle)} | ${getCreatorFollowers(activeCreator).toLocaleString()} followers | Sorsa ${escapeHtml(activeCreator.sorsaScore)}${activeCreator.verifiedCampaign ? " | Verified campaign" : ""}</p>
+          <p>${escapeHtml(activeCreator.handle)} | ${getCreatorFollowers(activeCreator).toLocaleString()} followers | Trust ${escapeHtml(formatCount(activeCreator.sorsaScore))}/${formatCount(SORSA_SCORE_LIMIT)}${activeCreator.verifiedCampaign ? " | Verified campaign" : ""}</p>
           <button class="button subtle dashboard-mobile-refresh" type="button" data-refresh-x-data>Refresh X data</button>
         </div>
         <label>
@@ -1899,8 +1960,9 @@ async function initCreatorDashboard() {
           </label>
         </div>
         <label>
-          Sorsa score
-          <input type="number" id="dashboardSorsaScore" min="0" max="100" step="1" value="${escapeHtml(activeCreator.sorsaScore)}" required>
+          Sorsa trust score
+          <input type="number" id="dashboardSorsaScore" min="0" max="${SORSA_SCORE_LIMIT}" step="1" value="${escapeHtml(activeCreator.sorsaScore)}" required>
+          <small>0 is the lowest trust level. ${formatCount(SORSA_SCORE_LIMIT)} is the highest.</small>
         </label>
         <label class="range-field">
           Pay range per post
@@ -2004,7 +2066,7 @@ async function initCreatorDashboard() {
     renderRegionSelect(regionSelect);
     regionSelect.value = activeCreator.region || "Global";
     skillSelect.value = activeCreator.skillType || "Writing";
-    sorsaInput.value = normalizeSorsaScore(activeCreator.sorsaScore, 50);
+    sorsaInput.value = normalizeSorsaScore(activeCreator.sorsaScore, DEFAULT_SORSA_SCORE);
     toggleVideoOptions(skillSelect, videoOptions);
     setRangeLabel(rateRange, rateLabel);
     renderPortfolio(activeCreator);
@@ -2281,7 +2343,7 @@ async function initProjectDashboard() {
             </div>
             <p>${escapeHtml(request.notes || "No campaign notes provided.")}</p>
             <ul class="selected-list">
-              ${(request.creators || []).map((creator) => `<li><strong>${escapeHtml(creator.name)}</strong><span class="selected-meta">${formatStoredRate(creator.minRate, creator.maxRate)} | Sorsa ${escapeHtml(creator.sorsaScore)}</span></li>`).join("")}
+              ${(request.creators || []).map((creator) => `<li><strong>${escapeHtml(creator.name)}</strong><span class="selected-meta">${formatStoredRate(creator.minRate, creator.maxRate)} | Trust ${escapeHtml(formatCount(creator.sorsaScore))}/${formatCount(SORSA_SCORE_LIMIT)}</span></li>`).join("")}
             </ul>
           </article>
         `).join("") : '<div class="empty-state">No submitted campaigns yet.</div>'}
@@ -2326,7 +2388,17 @@ async function initProjectDashboard() {
   }
 
   const storedAccess = getStoredProjectAccess();
-  if (storedAccess) {
+  const accessParams = new URLSearchParams(window.location.search);
+  const linkedAccess = {
+    contact: accessParams.get("contact") || "",
+    trackingCode: accessParams.get("code") || accessParams.get("trackingCode") || ""
+  };
+
+  if (linkedAccess.contact && linkedAccess.trackingCode) {
+    accessContact.value = linkedAccess.contact;
+    accessCode.value = normalizeTrackingCode(linkedAccess.trackingCode);
+    lookupProjectAccess(linkedAccess.contact, linkedAccess.trackingCode);
+  } else if (storedAccess) {
     accessContact.value = storedAccess.contact;
     accessCode.value = storedAccess.trackingCode;
     lookupProjectAccess(storedAccess.contact, storedAccess.trackingCode);
@@ -2458,21 +2530,96 @@ async function initProjectsPage() {
     setBriefCollapsed(mobileBriefQuery.matches, false);
   }
 
-  function showTrackingCodePanel(trackingCode, action = "Request submitted") {
+  function showTrackingCodePanel(trackingCode, action = "Request submitted", contact = projectContact.value.trim()) {
     if (!trackingCodePanel || !trackingCode) {
       return;
     }
 
+    const dashboardUrl = getProjectDashboardUrl(contact, trackingCode);
     trackingCodePanel.classList.remove("is-hidden");
     trackingCodePanel.innerHTML = `
       <span>${escapeHtml(action)}</span>
       <strong>${escapeHtml(normalizeTrackingCode(trackingCode))}</strong>
       <p>Use this code with your contact/email on the project dashboard to reopen saved shortlists and campaign requests.</p>
-      <a class="button ghost" href="project-dashboard.html">Track request</a>
+      <a class="button ghost" href="${escapeHtml(dashboardUrl)}">Track request</a>
     `;
   }
 
   let creatorProfileModal = null;
+  let requestSuccessModal = null;
+
+  function closeRequestSuccessModal() {
+    if (!requestSuccessModal) {
+      return;
+    }
+
+    requestSuccessModal.classList.remove("is-open");
+    requestSuccessModal.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("modal-open");
+  }
+
+  function ensureRequestSuccessModal() {
+    if (requestSuccessModal) {
+      return requestSuccessModal;
+    }
+
+    requestSuccessModal = document.createElement("div");
+    requestSuccessModal.id = "requestSuccessModal";
+    requestSuccessModal.className = "creator-profile-modal project-success-modal";
+    requestSuccessModal.setAttribute("aria-hidden", "true");
+    document.body.appendChild(requestSuccessModal);
+
+    requestSuccessModal.addEventListener("click", (event) => {
+      if (event.target === requestSuccessModal || event.target.closest("[data-close-request-success]")) {
+        closeRequestSuccessModal();
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && requestSuccessModal?.classList.contains("is-open")) {
+        closeRequestSuccessModal();
+      }
+    });
+
+    return requestSuccessModal;
+  }
+
+  function showRequestSuccessPopup(savedRequest, request, selectedCreators) {
+    const trackingCode = normalizeTrackingCode(savedRequest?.trackingCode);
+    if (!trackingCode) {
+      return;
+    }
+
+    const dashboardUrl = getProjectDashboardUrl(request.contact, trackingCode);
+    const estimate = formatSelectedBudgetEstimate(selectedCreators);
+    const modal = ensureRequestSuccessModal();
+    modal.innerHTML = `
+      <div class="project-success-dialog" role="dialog" aria-modal="true" aria-label="Project request created">
+        <button class="modal-close" type="button" data-close-request-success aria-label="Close request success popup">Close</button>
+        <p class="eyebrow">Request created</p>
+        <h2>Your project request is ready to track.</h2>
+        <p>We saved your creator shortlist and campaign brief. Use the tracking code below to reopen this request anytime.</p>
+        <div class="tracking-code-panel">
+          <span>Tracking code</span>
+          <strong>${escapeHtml(trackingCode)}</strong>
+          <p>This unlocks the request for ${escapeHtml(request.contact)}.</p>
+        </div>
+        <div class="project-success-estimate">
+          <span>Estimated creator spend</span>
+          <strong>${escapeHtml(estimate)}</strong>
+          <p>Planning estimate only, based on ${selectedCreators.length} selected creator${selectedCreators.length === 1 ? "" : "s"} and their listed per-post rates. Final pricing is confirmed during outreach.</p>
+        </div>
+        <div class="hero-actions">
+          <a class="button primary" href="${escapeHtml(dashboardUrl)}">View request now</a>
+          <button class="button ghost" type="button" data-close-request-success>Stay on this page</button>
+        </div>
+      </div>
+    `;
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("modal-open");
+    modal.querySelector(".button.primary")?.focus();
+  }
 
   function renderProjectCreatorModal(creator) {
     const xProfile = creator.xProfile || {};
@@ -2495,10 +2642,7 @@ async function initProjectsPage() {
             ${avatarUrl
               ? `<img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(creator.name)} profile picture">`
               : `<div class="creator-preview-fallback">${escapeHtml(getCreatorInitials(creator.name, creator.handle))}</div>`}
-            <div class="creator-modal-score">
-              <span>Sorsa</span>
-              <strong>${escapeHtml(creator.sorsaScore)}</strong>
-            </div>
+            ${renderTrustScoreBadge(creator, { tag: "div", className: "creator-modal-score" })}
           </div>
           <div class="creator-profile-modal-copy">
             <p class="eyebrow">Creator profile</p>
@@ -2516,7 +2660,7 @@ async function initProjectsPage() {
             <div class="badge-row">
               ${creator.verifiedCampaign ? "<span>Verified campaign</span>" : ""}
               ${badges.map((badge) => `<span>${escapeHtml(badge)}</span>`).join("")}
-              <span>Match ${Math.min(Math.round(matchScore), 120)}</span>
+              <span>Match ${Math.min(Math.round(matchScore), 120)}/120</span>
             </div>
             <div class="creator-tags">
               ${creator.categories.map((category) => `<span class="tag">${escapeHtml(category)}</span>`).join("")}
@@ -2719,7 +2863,7 @@ async function initProjectsPage() {
     const category = categoryFilter.value;
     const [minBudget, maxBudget] = getProjectBudgetRange();
     const projectVideoStyles = getCheckedValues("projectVideoStyle");
-    const minSorsa = Number(minSorsaFilter.value || 0);
+    const minSorsa = normalizeSorsaScore(minSorsaFilter.value || 0, 0);
     const availability = availabilityFilter.value;
     const searchValue = creatorSearch?.value || "";
     const context = {
@@ -2735,7 +2879,7 @@ async function initProjectsPage() {
       const matchesRegion = regionMatches(creator.region || "Global", projectRegion.value);
       const matchesSkill = creatorCanProvideSkill(creator.skillType || "Writing", projectSkill.value);
       const matchesVideo = matchesVideoStyles(creator, projectVideoStyles);
-      const matchesScore = hasCreatorSearch || Number(creator.sorsaScore || 0) >= minSorsa;
+      const matchesScore = hasCreatorSearch || normalizeSorsaScore(creator.sorsaScore, 0) >= minSorsa;
       const matchesAvailability = availability === "All" || creator.availability === availability;
       const matchesSearch = creatorMatchesSearch(creator, searchValue);
       return matchesCategory && matchesBudget && matchesRegion && matchesSkill && matchesVideo && matchesScore && matchesAvailability && matchesSearch;
@@ -2743,7 +2887,7 @@ async function initProjectsPage() {
 
     return filteredCreators.sort((a, b) => {
       if (sortCreators.value === "score") {
-        return Number(b.sorsaScore || 0) - Number(a.sorsaScore || 0);
+        return normalizeSorsaScore(b.sorsaScore, 0) - normalizeSorsaScore(a.sorsaScore, 0);
       }
 
       if (sortCreators.value === "price-low") {
@@ -2770,7 +2914,7 @@ async function initProjectsPage() {
     comparisonPanel.innerHTML = `
       <div>
         <strong>Compare shortlist</strong>
-        <span>${selectedCreators.length} creators selected | ${formatSelectedBudgetEstimate(selectedCreators)} estimated total</span>
+        <span>${selectedCreators.length} creators selected | ${formatSelectedBudgetEstimate(selectedCreators)} estimated creator spend</span>
       </div>
       <div class="compare-grid">
         ${selectedCreators.map((creator) => `
@@ -2778,7 +2922,7 @@ async function initProjectsPage() {
             <strong>${escapeHtml(creator.name)}</strong>
             <span>${escapeHtml(creator.region || "Global")}</span>
             <span>${formatStoredRate(creator.minRate, creator.maxRate)}</span>
-            <span>Sorsa ${escapeHtml(creator.sorsaScore)}</span>
+            <span>Trust ${escapeHtml(formatCount(creator.sorsaScore))}/${formatCount(SORSA_SCORE_LIMIT)}</span>
             <span>${escapeHtml(creator.availability || "Available this week")}</span>
           </article>
         `).join("")}
@@ -2842,11 +2986,11 @@ async function initProjectsPage() {
                 ${xBio ? `<p class="creator-x-bio">${escapeHtml(xBio)}</p>` : ""}
                 <p class="rate-line">${formatCount(xProfile.followers)} X followers / ${formatStoredRate(creator.minRate, creator.maxRate)} per post</p>
               </div>
-              <span class="score-badge">${escapeHtml(creator.sorsaScore)}</span>
+              ${renderTrustScoreBadge(creator)}
             </div>
             <div class="badge-row">
               ${badges.map((badge) => `<span>${escapeHtml(badge)}</span>`).join("")}
-              <span>Match ${Math.min(Math.round(matchScore), 120)}</span>
+              <span>Match ${Math.min(Math.round(matchScore), 120)}/120</span>
             </div>
             <div class="creator-tags">
               ${creator.categories.map((category) => `<span class="tag">${escapeHtml(category)}</span>`).join("")}
@@ -2954,7 +3098,8 @@ async function initProjectsPage() {
       toggleVideoOptions(projectSkill, projectVideoOptions);
       renderCreators();
       renderSelection();
-      showTrackingCodePanel(savedRequest.trackingCode, "Request submitted");
+      showTrackingCodePanel(savedRequest.trackingCode, "Request submitted", request.contact);
+      showRequestSuccessPopup(savedRequest, request, selectedCreators);
       showToast(`Request submitted. Tracking code: ${normalizeTrackingCode(savedRequest.trackingCode)}`);
     } catch (error) {
       showToast(error.message || "Request could not be submitted.");
@@ -3348,7 +3493,7 @@ async function initCreatorOnboardingPage() {
         handle: normalizeHandleForDisplay(formHandle),
         minRate,
         maxRate,
-        sorsaScore: normalizeSorsaScore(sorsaInput?.value, 50),
+        sorsaScore: normalizeSorsaScore(sorsaInput?.value, DEFAULT_SORSA_SCORE),
         region: regionSelect.value,
         availability: document.querySelector("#onboardingAvailability").value,
         example: document.querySelector("#onboardingExample").value.trim(),
@@ -3440,7 +3585,7 @@ async function initAdminPage() {
           ${request.creators.map((creator) => `
             <li>
               <strong>${escapeHtml(creator.name)} ${escapeHtml(creator.handle)}</strong>
-              <span class="selected-meta">${creator.categories.map(escapeHtml).join(", ")} | ${escapeHtml(creator.region || "Global")} | ${escapeHtml(creator.skillType || "Writing")} ${(creator.videoStyles || []).length ? `| ${(creator.videoStyles || []).map(escapeHtml).join(", ")}` : ""} | ${formatStoredRate(creator.minRate, creator.maxRate)} | Sorsa ${escapeHtml(creator.sorsaScore)} | ${escapeHtml(creator.contact)}</span>
+              <span class="selected-meta">${creator.categories.map(escapeHtml).join(", ")} | ${escapeHtml(creator.region || "Global")} | ${escapeHtml(creator.skillType || "Writing")} ${(creator.videoStyles || []).length ? `| ${(creator.videoStyles || []).map(escapeHtml).join(", ")}` : ""} | ${formatStoredRate(creator.minRate, creator.maxRate)} | Trust ${escapeHtml(formatCount(creator.sorsaScore))}/${formatCount(SORSA_SCORE_LIMIT)} | ${escapeHtml(creator.contact)}</span>
               ${creator.xProfile?.url ? `<span class="selected-meta">X: ${escapeHtml(creator.xProfile.url)}${creator.xProfile.followers ? ` | ${Number(creator.xProfile.followers).toLocaleString()} followers` : ""}${creator.xProfile.notableFollowers ? ` | Notable followers: ${escapeHtml(creator.xProfile.notableFollowers)}` : ""}${creator.xProfile.pinnedTweet ? ` | Pinned: ${escapeHtml(creator.xProfile.pinnedTweet)}` : ""}</span>` : ""}
             </li>
           `).join("")}
