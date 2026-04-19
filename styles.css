@@ -1128,6 +1128,10 @@ legend span {
   gap: 1rem;
 }
 
+.dashboard-mobile-refresh {
+  display: none;
+}
+
 .creator-list {
   grid-template-columns: 1fr;
 }
@@ -4943,5 +4947,15 @@ main > .section-shell[data-chameleon]:not(.signal-hero) {
 
   body:not([data-chameleon]) .page-hero:not(.project-hero)::after {
     width: min(180px, 48%);
+  }
+
+  .dashboard-mobile-refresh {
+    display: inline-flex;
+    width: 100%;
+    margin-top: 0.75rem;
+  }
+
+  .creator-dashboard-page .x-intel-heading [data-refresh-x-data] {
+    width: 100%;
   }
 }
